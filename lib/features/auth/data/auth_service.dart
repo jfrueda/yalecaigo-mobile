@@ -11,7 +11,10 @@ class AuthService {
 
     final response = await PublicApiClient.dio.post<Map<String, dynamic>>(
       Endpoints.tokenObtain,
-      data: {'username': normalizedUsername, 'password': password},
+      data: {
+        'username': normalizedUsername,
+        'password': password,
+      },
     );
 
     final access = response.data?['access']?.toString();

@@ -6,7 +6,9 @@ void main() {
   testWidgets('la pantalla de acceso muestra los controles principales', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: LoginPage()));
+    await tester.pumpWidget(
+      const MaterialApp(home: LoginPage()),
+    );
 
     expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(find.byType(TextField), findsNWidgets(2));

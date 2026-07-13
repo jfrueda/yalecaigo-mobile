@@ -76,11 +76,7 @@ class _PickLocationPageState extends State<PickLocationPage> {
                     point: _selected,
                     width: 40,
                     height: 40,
-                    child: const Icon(
-                      Icons.location_pin,
-                      color: Colors.red,
-                      size: 40,
-                    ),
+                    child: const Icon(Icons.location_pin, color: Colors.red, size: 40),
                   ),
                 ],
               ),
@@ -120,16 +116,12 @@ class _PickLocationPageState extends State<PickLocationPage> {
                             onPressed: _resolving ? null : _resolveName,
                             icon: _resolving
                                 ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                                 : const Icon(Icons.place),
-                            label: Text(
-                              _resolving ? 'Buscando…' : 'Buscar nombre',
-                            ),
+                            label: Text(_resolving ? 'Buscando…' : 'Buscar nombre'),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -137,10 +129,7 @@ class _PickLocationPageState extends State<PickLocationPage> {
                           child: ElevatedButton(
                             onPressed: () {
                               Navigator.of(context).pop(
-                                PickedLocation(
-                                  point: _selected,
-                                  name: _placeName,
-                                ),
+                                PickedLocation(point: _selected, name: _placeName),
                               );
                             },
                             child: const Text('Confirmar'),

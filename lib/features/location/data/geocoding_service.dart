@@ -14,7 +14,10 @@ class GeocodingService {
   );
 
   /// Retorna un nombre amigable (display_name) usando reverse geocode.
-  Future<String?> reverse({required double lat, required double lng}) async {
+  Future<String?> reverse({
+    required double lat,
+    required double lng,
+  }) async {
     final res = await _dio.get(
       '/reverse',
       queryParameters: {

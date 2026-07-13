@@ -114,7 +114,10 @@ class _RegisterPageState extends State<RegisterPage> {
                       border: OutlineInputBorder(),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'client', child: Text('Cliente')),
+                      DropdownMenuItem(
+                        value: 'client',
+                        child: Text('Cliente'),
+                      ),
                       DropdownMenuItem(
                         value: 'provider',
                         child: Text('Prestador'),
@@ -133,8 +136,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       labelText: 'Contraseña',
-                      helperText:
-                          'Usa al menos 8 caracteres y evita claves comunes.',
+                      helperText: 'Usa al menos 8 caracteres y evita claves comunes.',
                       border: OutlineInputBorder(),
                     ),
                   ),

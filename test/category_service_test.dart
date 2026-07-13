@@ -7,7 +7,10 @@ void main() {
       CategoryItem.fromJson({'id': 1, 'name': 'Acompañamiento'}).name,
       'Acompañamiento',
     );
-    expect(CategoryItem.fromJson({'id': '2', 'title': 'Diligencias'}).id, 2);
+    expect(
+      CategoryItem.fromJson({'id': '2', 'title': 'Diligencias'}).id,
+      2,
+    );
     expect(
       CategoryItem.fromJson({'id': 3, 'label': 'Compras'}).name,
       'Compras',

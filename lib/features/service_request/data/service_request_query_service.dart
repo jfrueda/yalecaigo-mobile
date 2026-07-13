@@ -9,6 +9,16 @@ class ServiceRequestQueryService {
     return _asList(response.data);
   }
 
+  Future<List<Map<String, dynamic>>> listProviderHistory() async {
+    final response = await ApiClient.dio.get(Endpoints.providerHistory);
+    return _asList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> listAvailableRequests() async {
+    final response = await ApiClient.dio.get(Endpoints.availableRequests);
+    return _asList(response.data);
+  }
+
   Future<Map<String, dynamic>?> getActiveRequest({
     bool fallbackToList = true,
   }) async {
@@ -22,13 +32,11 @@ class ServiceRequestQueryService {
       }
       if (!fallbackToList) return null;
 
-      // Compatibilidad con un backend antiguo que todavía no tenía /active/.
-      // Este fallback solo debe usarse para clientes, porque /requests/ está
-      // protegido por rol en el backend unificado.
       final requests = await listMyRequests();
       for (final request in requests) {
         final requestStatus = request['status']?.toString().toLowerCase();
         if (const {
+          'pending_payment',
           'pending',
           'searching',
           'matched',
@@ -58,11 +66,7 @@ class ServiceRequestQueryService {
     if (raw is Map && raw['results'] is List) {
       raw = raw['results'];
     }
-
-    if (raw is! List) {
-      return const [];
-    }
-
+    if (raw is! List) return const [];
     return raw
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
@@ -71,7 +75,6 @@ class ServiceRequestQueryService {
 
   Map<String, dynamic>? _firstMap(dynamic data) {
     if (data == null) return null;
-
     if (data is Map) {
       if (data['results'] is List) {
         final results = _asList(data);
@@ -79,12 +82,10 @@ class ServiceRequestQueryService {
       }
       return Map<String, dynamic>.from(data);
     }
-
     if (data is List) {
       final results = _asList(data);
       return results.isEmpty ? null : results.first;
     }
-
     return null;
   }
 }

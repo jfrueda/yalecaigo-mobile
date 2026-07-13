@@ -9,6 +9,7 @@ class LocationPingService {
     required double locationLat,
     required double locationLng,
     String source = 'simulated',
+    double accuracy = 10,
   }) {
     return ApiClient.dio.post(
       Endpoints.locationPings,
@@ -16,7 +17,7 @@ class LocationPingService {
         'service_request': serviceRequestId,
         'latitude': locationLat,
         'longitude': locationLng,
-        'accuracy': 10.0,
+        'accuracy': accuracy,
         'source': source,
       },
     );

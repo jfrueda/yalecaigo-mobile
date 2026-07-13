@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/utils/service_display.dart';
 import '../../location/data/location_search_service.dart';
 import '../../location/presentation/pick_location_page.dart';
 import '../data/category_service.dart';
-import '../data/service_request_service.dart';
 import '../data/service_request_query_service.dart';
+import '../data/service_request_service.dart';
 import 'request_detail_page.dart';
 
 class CreateRequestPage extends StatefulWidget {
@@ -21,70 +22,56 @@ class CreateRequestPage extends StatefulWidget {
 
 class _CreateRequestPageState extends State<CreateRequestPage> {
   final _formKey = GlobalKey<FormState>();
-
-  // Servicios
   final _service = ServiceRequestService();
   final _queryService = ServiceRequestQueryService();
   final _categoryService = CategoryService();
-
-  // Categorías
-  List<CategoryItem> _categories = [];
-  bool _loadingCategories = false;
-  int? _selectedCategoryId;
-
-  // Ubicación
   final _locationTextCtrl = TextEditingController();
-  final _latCtrl = TextEditingController();
-  final _lngCtrl = TextEditingController();
-  LatLng _location = const LatLng(4.6767, -74.0482);
-
-  final MapController _mapController = MapController();
-
+  final _notesCtrl = TextEditingController();
+  final _mapController = MapController();
   final _locationSearchService = LocationSearchService(
     rules: LocationRules.defaultBogota(),
   );
 
-  List<LocationPlace> _locationResults = [];
-  bool _searchingLocation = false;
-  String? _locationHintError;
-  Timer? _debounce;
+  List<CategoryItem> _categories = const [];
+  int? _selectedCategoryId;
+  bool _loadingCategories = false;
 
-  // ✅ NUEVO: evita que al seleccionar una sugerencia se dispare otra búsqueda
+  LatLng _location = const LatLng(4.6767, -74.0482);
+  LocationPlace? _selectedPlace;
+  List<LocationPlace> _locationResults = const [];
+  bool _searchingLocation = false;
+  String? _locationError;
+  Timer? _debounce;
   bool _suppressLocationListener = false;
 
-  // Fecha/hora
-  DateTime? _startTime;
-
-  // Duración (min 30, max 180)
-  final List<int> _durationOptions = const [30, 60, 90, 120, 150, 180];
+  bool _needNow = true;
+  late DateTime _startTime;
   int _durationMinutes = 60;
+  final _durationOptions = const [30, 60, 90, 120, 150, 180];
 
-  // Preferencias
-  String? _preferredGender; // null / 'M' / 'F'
-  final List<_AgeRange> _ageRanges = _buildAgeRanges();
+  String? _preferredGender;
   _AgeRange? _selectedAgeRange;
+  final _ageRanges = const [
+    _AgeRange(18, 25),
+    _AgeRange(25, 30),
+    _AgeRange(30, 35),
+    _AgeRange(35, 40),
+    _AgeRange(40, 45),
+    _AgeRange(45, 50),
+    _AgeRange(50, 55),
+    _AgeRange(55, 60),
+    _AgeRange(60, 65),
+  ];
 
-  // Notas
-  final _notesCtrl = TextEditingController();
-
-  // UI state
   bool _loading = false;
   String? _result;
-
-  // Valor estimado (placeholder MVP)
-  static const int _pricePerMinuteCop = 500; // ~30.000/hora
 
   @override
   void initState() {
     super.initState();
-    _preferredGender = _normalizeGender(_preferredGender);
-    _loadCategories();
-
-    // init lat/lng text
-    _latCtrl.text = _fmtCoord(_location.latitude);
-    _lngCtrl.text = _fmtCoord(_location.longitude);
-
+    _startTime = DateTime.now().add(const Duration(minutes: 5));
     _locationTextCtrl.addListener(_onLocationTextChanged);
+    _loadCategories();
   }
 
   @override
@@ -92,91 +79,8 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     _debounce?.cancel();
     _locationTextCtrl.removeListener(_onLocationTextChanged);
     _locationTextCtrl.dispose();
-    _latCtrl.dispose();
-    _lngCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
-  }
-
-  // -----------------------------
-  // Helpers
-  // -----------------------------
-  static List<_AgeRange> _buildAgeRanges() {
-    final ranges = <_AgeRange>[];
-    ranges.add(const _AgeRange(18, 25));
-    for (int start = 25; start <= 60; start += 5) {
-      ranges.add(_AgeRange(start, start + 5));
-    }
-    return ranges;
-  }
-
-  String? _normalizeGender(String? v) {
-    if (v == null) return null;
-    if (v == 'M' || v == 'F') return v;
-    return null;
-  }
-
-  void _setGender(String? code) {
-    setState(() => _preferredGender = _normalizeGender(code));
-  }
-
-  int _estimatedPriceCop() => _durationMinutes * _pricePerMinuteCop;
-
-  String _formatCop(int value) {
-    final s = value.toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      final idxFromEnd = s.length - i;
-      buf.write(s[i]);
-      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) buf.write('.');
-    }
-    return buf.toString();
-  }
-
-  String _fmtCoord(double v) {
-    // Evita error backend "no more than 9 digits in total"
-    // 6 decimales suele ser suficiente para GPS y no exagera longitud.
-    return v.toStringAsFixed(6);
-  }
-
-  void _moveMapSafe(LatLng target, double zoom) {
-    // ✅ en flutter_map a veces el controller aún no está listo en el mismo frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      try {
-        _mapController.move(target, zoom);
-      } catch (_) {
-        // no-op MVP
-      }
-    });
-  }
-
-  Future<void> _pickStartDateTime() async {
-    final now = DateTime.now();
-
-    final date = await showDatePicker(
-      context: context,
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 30)),
-      initialDate: now,
-    );
-    if (date == null || !mounted) return;
-
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 15))),
-    );
-    if (time == null) return;
-
-    setState(() {
-      _startTime = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-      );
-    });
   }
 
   Future<void> _loadCategories() async {
@@ -186,103 +90,92 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       if (!mounted) return;
       setState(() {
         _categories = items;
-        _selectedCategoryId ??= items.isNotEmpty ? items.first.id : null;
+        _selectedCategoryId ??= items.isEmpty ? null : items.first.id;
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _categories = [];
-        _selectedCategoryId ??= 1; // fallback
-      });
+      setState(() => _result = 'No fue posible cargar las categorías.');
     } finally {
       if (mounted) setState(() => _loadingCategories = false);
     }
   }
 
-  String _categoryLabel() {
-    final id = _selectedCategoryId;
-    if (id == null) return 'Sin categoría';
-    final match = _categories.where((c) => c.id == id).toList();
-    if (match.isNotEmpty) return match.first.name;
-    return 'Categoría #$id';
+  CategoryItem? get _selectedCategory {
+    for (final category in _categories) {
+      if (category.id == _selectedCategoryId) return category;
+    }
+    return null;
   }
 
-  // -----------------------------
-  // Location autocomplete
-  // -----------------------------
+  double get _estimatedPrice {
+    final category = _selectedCategory;
+    if (category == null) return 0;
+    return category.basePricePerHour * _durationMinutes / 60;
+  }
+
   void _onLocationTextChanged() {
-    if (_suppressLocationListener) return; // ✅ evita re-búsqueda al seleccionar
-
-    final q = _locationTextCtrl.text.trim();
+    if (_suppressLocationListener) return;
+    _selectedPlace = null;
+    final query = _locationTextCtrl.text.trim();
     _debounce?.cancel();
-
-    if (q.isEmpty) {
+    if (query.length < 3) {
       setState(() {
-        _locationResults = [];
-        _locationHintError = null;
+        _locationResults = const [];
+        _locationError = null;
       });
       return;
     }
-
-    _debounce = Timer(const Duration(milliseconds: 350), () async {
-      await _searchLocation(q);
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      _searchLocation(query);
     });
   }
 
-  Future<void> _searchLocation(String q) async {
+  Future<void> _searchLocation(String query) async {
     setState(() {
       _searchingLocation = true;
-      _locationHintError = null;
+      _locationError = null;
     });
-
     try {
-      final results = await _locationSearchService.search(q, limit: 8);
+      final results = await _locationSearchService.search(query, limit: 10);
       if (!mounted) return;
-
-      // Mostramos sugerencias, pero en el mensaje de error nos basamos en permitidos.
-      final allowed = results.where((r) => r.isAllowed).toList();
-
+      final allowed = results.where((item) => item.isAllowed).toList();
       setState(() {
-        _locationResults = results;
-        _locationHintError = allowed.isEmpty
-            ? 'No encontramos lugares públicos válidos en la ciudad permitida. '
-                  'Prueba con un parque, café o centro comercial.'
+        _locationResults = allowed;
+        _locationError = allowed.isEmpty
+            ? 'No encontramos un punto público permitido. Busca un parque, '
+                'café, centro comercial, biblioteca o restaurante.'
             : null;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        _locationResults = [];
-        _locationHintError = 'Error buscando ubicación. Intenta de nuevo.';
+        _locationResults = const [];
+        _locationError = 'No fue posible buscar el lugar. Intenta nuevamente.';
       });
     } finally {
       if (mounted) setState(() => _searchingLocation = false);
     }
   }
 
-  void _applyPlace(LocationPlace p) {
-    // ✅ clave: al setear texto desde código, no queremos disparar otro search
+  void _applyPlace(LocationPlace place) {
     _debounce?.cancel();
     _suppressLocationListener = true;
-
-    final label = (p.title.isNotEmpty) ? p.title : p.displayName;
-
     setState(() {
-      _locationTextCtrl.text = label;
-      _location = LatLng(p.lat, p.lng);
-      _latCtrl.text = _fmtCoord(p.lat);
-      _lngCtrl.text = _fmtCoord(p.lng);
-      _locationResults = [];
-      _locationHintError = p.isAllowed
-          ? null
-          : (p.rejectReason ?? _locationHintError);
+      _selectedPlace = place;
+      _location = LatLng(place.lat, place.lng);
+      _locationTextCtrl.text = place.displayName;
+      _locationResults = const [];
+      _locationError = null;
     });
-
-    _moveMapSafe(_location, 16);
-
-    // re-habilita listener en el siguiente microtask/frame
-    Future.microtask(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      try {
+        _mapController.move(_location, 16);
+      } catch (_) {
+        // El mapa puede no estar listo durante el primer frame.
+      }
+    });
+    Future<void>.delayed(Duration.zero, () {
       _suppressLocationListener = false;
     });
   }
@@ -293,548 +186,512 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         builder: (_) => PickLocationPage(initialPosition: _location),
       ),
     );
-
     if (result == null || !mounted) return;
 
-    final dLat = result.point.latitude;
-    final dLng = result.point.longitude;
-    final label = result.name?.trim();
-
+    final name = result.name?.trim();
+    _suppressLocationListener = true;
     setState(() {
-      _location = LatLng(dLat, dLng);
-      _latCtrl.text = _fmtCoord(dLat);
-      _lngCtrl.text = _fmtCoord(dLng);
-      if (label != null && label.isNotEmpty) {
-        _suppressLocationListener = true;
-        _locationTextCtrl.text = label;
+      _location = result.point;
+      _selectedPlace = null;
+      if (name != null && name.isNotEmpty) {
+        _locationTextCtrl.text = name;
       }
-      _locationResults = [];
-      _locationHintError = null;
+      _locationResults = const [];
+      _locationError = null;
     });
-
-    if (label != null && label.isNotEmpty) {
-      Future.microtask(() {
-        if (mounted) _suppressLocationListener = false;
-      });
-    }
-
-    _moveMapSafe(_location, 16);
+    Future<void>.delayed(Duration.zero, () {
+      _suppressLocationListener = false;
+    });
   }
 
-  // -----------------------------
-  // Create request
-  // -----------------------------
+  Future<void> _pickStartDateTime() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 30)),
+      initialDate: _startTime.isBefore(now) ? now : _startTime,
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_startTime),
+    );
+    if (time == null) return;
+    setState(() {
+      _needNow = false;
+      _startTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    });
+  }
+
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
-
     if (!_formKey.currentState!.validate()) return;
-    if (_startTime == null) {
-      setState(() => _result = '❌ Selecciona fecha y hora de inicio');
+    if (_selectedCategoryId == null) {
+      setState(() => _result = 'Selecciona una categoría.');
+      return;
+    }
+    if (_locationTextCtrl.text.trim().isEmpty) {
+      setState(() => _result = 'Selecciona un punto de encuentro.');
       return;
     }
 
-    final categoryId = _selectedCategoryId ?? 1;
-    final locationText = _locationTextCtrl.text.trim();
-    final lat = double.tryParse(_latCtrl.text.trim());
-    final lng = double.tryParse(_lngCtrl.text.trim());
-    if (lat == null || lng == null) {
-      setState(() => _result = '❌ Lat/Lng inválidas');
-      return;
-    }
-
-    final preferredAgeMin = _selectedAgeRange?.min;
-    final preferredAgeMax = _selectedAgeRange?.max;
+    final effectiveStart = _needNow
+        ? DateTime.now().add(const Duration(minutes: 5))
+        : _startTime;
 
     setState(() {
       _loading = true;
       _result = null;
     });
-
     try {
-      final latValue = double.parse(_fmtCoord(lat));
-      final lngValue = double.parse(_fmtCoord(lng));
-
-      final res = await _service.createRequest(
-        categoryId: categoryId,
-        locationText: locationText,
-        locationLat: latValue,
-        locationLng: lngValue,
-        requestedStartTime: _startTime!.toUtc(),
+      final response = await _service.createRequest(
+        categoryId: _selectedCategoryId!,
+        locationText: _locationTextCtrl.text.trim(),
+        locationLat: double.parse(_location.latitude.toStringAsFixed(6)),
+        locationLng: double.parse(_location.longitude.toStringAsFixed(6)),
+        requestedStartTime: effectiveStart,
         requestedDurationMinutes: _durationMinutes,
         notes: _notesCtrl.text.trim(),
         preferredGender: _preferredGender,
-        preferredAgeMin: preferredAgeMin,
-        preferredAgeMax: preferredAgeMax,
+        preferredAgeMin: _selectedAgeRange?.min,
+        preferredAgeMax: _selectedAgeRange?.max,
       );
-
-      final created = Map<String, dynamic>.from(res.data ?? {});
-
-      // Estado inmediato en UI
-      created['status'] ??= 'pending';
-
-      // Datos inmediatos (si backend tarda en refrescar)
-      created['category'] ??= categoryId;
-      created['location_text'] ??= locationText;
-      created['location_lat'] ??= lat;
-      created['location_lng'] ??= lng;
-      created['requested_duration_minutes'] ??= _durationMinutes;
-      created['requested_start_time'] ??= _startTime!.toUtc().toIso8601String();
-
-      created['preferred_gender'] ??= _preferredGender;
-      created['preferred_age_min'] ??= preferredAgeMin;
-      created['preferred_age_max'] ??= preferredAgeMax;
-
-      // Valor estimado MVP (solo UI)
-      created['calculated_price'] ??= _estimatedPriceCop();
-
-      // id puede no venir
-      final id = created['id'];
-      if (id == null) {
-        final active = await _queryService.getActiveRequest();
-        if (!mounted) return;
-
-        if (active != null) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => RequestDetailPage(request: active),
-            ),
-          );
-          return;
-        }
-
-        setState(
-          () => _result = '❌ No tengo ID válido de solicitud. Revisa backend.',
-        );
-        return;
+      var created = Map<String, dynamic>.from(response.data as Map);
+      if (created['id'] == null) {
+        created = await _queryService.getActiveRequest() ?? created;
       }
-
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => RequestDetailPage(request: created)),
+        MaterialPageRoute<void>(
+          builder: (_) => RequestDetailPage(request: created),
+        ),
       );
-    } catch (e) {
-      String msg = '❌ Error creando solicitud: $e';
-      if (e is DioException) {
-        msg = '❌ Error (${e.response?.statusCode}): ${e.response?.data}';
-      }
-      if (mounted) setState(() => _result = msg);
+    } on DioException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _result = error.response?.data is Map
+            ? (error.response?.data['detail']?.toString() ??
+                'No fue posible crear la solicitud.')
+            : 'No fue posible crear la solicitud.';
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  // -----------------------------
-  // UI Blocks
-  // -----------------------------
-  Widget _categorySelector() {
-    if (_loadingCategories) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: LinearProgressIndicator(),
-      );
-    }
-
-    if (_categories.isNotEmpty) {
-      return DropdownButtonFormField<int>(
-        initialValue: _selectedCategoryId,
-        decoration: const InputDecoration(
-          labelText: 'Categoría',
-          border: OutlineInputBorder(),
-        ),
-        items: _categories
-            .map(
-              (c) => DropdownMenuItem<int>(
-                value: c.id,
-                child: Text('${c.name} (ID: ${c.id})'),
-              ),
-            )
-            .toList(),
-        onChanged: (v) => setState(() => _selectedCategoryId = v),
-      );
-    }
-
-    // Fallback si no hay endpoint / no cargó: input ID + label
-    return TextFormField(
-      initialValue: (_selectedCategoryId ?? 1).toString(),
-      keyboardType: TextInputType.number,
-      decoration: InputDecoration(
-        labelText: 'Categoría (ID)',
-        helperText: 'Nombre: ${_categoryLabel()}',
-        border: const OutlineInputBorder(),
-      ),
-      validator: (v) {
-        final t = (v ?? '').trim();
-        final id = int.tryParse(t);
-        if (id == null || id <= 0) return 'ID inválido';
-        return null;
-      },
-      onChanged: (v) {
-        final id = int.tryParse(v.trim());
-        setState(() => _selectedCategoryId = id);
-      },
-    );
-  }
-
-  Widget _durationSelector() {
-    return DropdownButtonFormField<int>(
-      initialValue: _durationMinutes,
-      decoration: const InputDecoration(
-        labelText: 'Duración (minutos)',
-        border: OutlineInputBorder(),
-        helperText: 'Mínimo 30 min, máximo 3 horas',
-      ),
-      items: _durationOptions
-          .map(
-            (m) => DropdownMenuItem<int>(value: m, child: Text('$m minutos')),
-          )
-          .toList(),
-      onChanged: (v) {
-        if (v == null) return;
-        setState(() => _durationMinutes = v);
-      },
-    );
-  }
-
-  Widget _priceCard() {
-    final price = _estimatedPriceCop();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Valor estimado',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Text('${_formatCop(price)} COP'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _genderChecks() {
-    final isM = _preferredGender == 'M';
-    final isF = _preferredGender == 'F';
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Preferencias',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Sin preferencia'),
-              value: _preferredGender == null,
-              onChanged: (v) {
-                if (v == true) _setGender(null);
-              },
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Masculino'),
-              value: isM,
-              onChanged: (v) {
-                if (v == true) {
-                  _setGender('M');
-                } else {
-                  _setGender(null);
-                }
-              },
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Femenino'),
-              value: isF,
-              onChanged: (v) {
-                if (v == true) {
-                  _setGender('F');
-                } else {
-                  _setGender(null);
-                }
-              },
-            ),
-            const Divider(height: 24),
-            DropdownButtonFormField<_AgeRange?>(
-              initialValue: _selectedAgeRange,
-              decoration: const InputDecoration(
-                labelText: 'Rango de edad (opcional)',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                const DropdownMenuItem<_AgeRange?>(
-                  value: null,
-                  child: Text('Sin preferencia'),
-                ),
-                ..._ageRanges.map(
-                  (r) => DropdownMenuItem<_AgeRange?>(
-                    value: r,
-                    child: Text('${r.min} a ${r.max}'),
-                  ),
-                ),
-              ],
-              onChanged: (v) => setState(() => _selectedAgeRange = v),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Nota: si no defines preferencias, la app buscará el mejor match disponible.',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _mapPreview() {
-    final marker = Marker(
-      point: _location,
-      width: 40,
-      height: 40,
-      child: const Icon(Icons.location_pin, size: 40, color: Colors.red),
-    );
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Mapa', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                height: 180,
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: _location,
-                    initialZoom: 15,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'co.opentic.yalecaigo',
-                    ),
-                    MarkerLayer(markers: [marker]),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _latCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Latitud',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      final d = double.tryParse((v ?? '').trim());
-                      if (d == null) return 'Latitud inválida';
-                      return null;
-                    },
-                    onChanged: (v) {
-                      final d = double.tryParse(v.trim());
-                      if (d == null) return;
-                      setState(
-                        () => _location = LatLng(d, _location.longitude),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _lngCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Longitud',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      final d = double.tryParse((v ?? '').trim());
-                      if (d == null) return 'Longitud inválida';
-                      return null;
-                    },
-                    onChanged: (v) {
-                      final d = double.tryParse(v.trim());
-                      if (d == null) return;
-                      setState(() => _location = LatLng(_location.latitude, d));
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _pickOnMap,
-              icon: const Icon(Icons.map),
-              label: const Text('Elegir en el mapa'),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Solo puntos públicos (parques, cafés, centros comerciales). '
-              'No hoteles ni residencias. Debe estar dentro de la ciudad permitida.',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _locationSuggestions() {
-    if (_locationTextCtrl.text.trim().isEmpty) return const SizedBox.shrink();
-
-    final hint = _locationHintError;
-    final results = _locationResults;
-
+  Widget _categoryField() {
+    if (_loadingCategories) return const LinearProgressIndicator();
+    final selected = _selectedCategory;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_searchingLocation)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: LinearProgressIndicator(minHeight: 2),
+        const Text(
+          '1. ¿Qué acompañamiento necesitas?',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          key: ValueKey(_selectedCategoryId),
+          initialValue: _selectedCategoryId,
+          decoration: const InputDecoration(
+            labelText: 'Selecciona la actividad',
+            prefixIcon: Icon(Icons.category_outlined),
+            border: OutlineInputBorder(),
           ),
-        if (hint != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(hint, style: const TextStyle(color: Colors.red)),
-          ),
-        if (results.isNotEmpty)
-          Card(
-            child: Column(
-              children: results.map<Widget>((LocationPlace r) {
-                final subtitle = r.displayName;
-                final allowed = r.isAllowed;
-
-                return ListTile(
-                  dense: true,
-                  title: Text(r.title),
-                  subtitle: Text(
-                    allowed ? subtitle : '$subtitle\n${r.rejectReason ?? ''}',
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
+          isExpanded: true,
+          items: _categories
+              .map(
+                (category) => DropdownMenuItem<int>(
+                  value: category.id,
+                  child: Text(category.name),
+                ),
+              )
+              .toList(),
+          onChanged: (value) => setState(() => _selectedCategoryId = value),
+          validator: (value) => value == null ? 'Selecciona una categoría' : null,
+        ),
+        if (selected != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        selected.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(selected.description),
+                    ],
                   ),
-                  trailing: allowed
-                      ? const Icon(Icons.check_circle, color: Colors.green)
-                      : const Icon(Icons.block, color: Colors.redAccent),
-
-                  // ✅ SOLO PERMITE TAP SI ES ALLOWED
-                  onTap: allowed ? () => _applyPlace(r) : null,
-                );
-              }).toList(),
+                ),
+              ],
             ),
           ),
+        ],
       ],
     );
   }
 
-  // -----------------------------
-  // Build
-  // -----------------------------
-  @override
-  Widget build(BuildContext context) {
-    final categoryName = _categoryLabel();
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Crear solicitud')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
+  Widget _locationField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          '2. Elige un punto de encuentro público',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            border: Border.all(color: Colors.amber.shade300),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _categorySelector(),
-              const SizedBox(height: 8),
-              Text(
-                'Nombre categoría: $categoryName',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _locationTextCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Ubicación (texto)',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  if ((v ?? '').trim().isEmpty) return 'Ubicación requerida';
-                  return null;
-                },
-              ),
-              _locationSuggestions(),
-              const SizedBox(height: 12),
-              _mapPreview(),
-              const SizedBox(height: 12),
-              _durationSelector(),
-              const SizedBox(height: 12),
-              _priceCard(),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  'Fecha/hora inicio',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  _startTime == null
-                      ? 'Selecciona fecha y hora'
-                      : _startTime.toString(),
-                ),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: _pickStartDateTime,
-              ),
-              const SizedBox(height: 12),
-              _genderChecks(),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _notesCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Notas (opcional)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loading ? null : _submit,
-                child: _loading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Crear solicitud'),
-              ),
-              const SizedBox(height: 12),
-              if (_result != null)
-                Text(
-                  _result!,
-                  style: TextStyle(
-                    color: _result!.startsWith('✅') ? Colors.green : Colors.red,
+              Row(
+                children: [
+                  Icon(Icons.verified_user_outlined),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Por seguridad, la primera reunión debe ser en un lugar abierto al público.',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Text('✓ Permitidos: parques, cafés, restaurantes, bibliotecas y centros comerciales.'),
+              Text('✕ No permitidos: viviendas, apartamentos, hoteles ni habitaciones.'),
             ],
           ),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: _locationTextCtrl,
+          decoration: InputDecoration(
+            labelText: 'Punto de encuentro',
+            hintText: 'Ej. Parque de la 93',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _searchingLocation
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : null,
+            border: const OutlineInputBorder(),
+          ),
+          validator: (value) => (value ?? '').trim().isEmpty
+              ? 'El punto de encuentro es obligatorio'
+              : null,
+        ),
+        if (_locationError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _locationError!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        if (_locationResults.isNotEmpty)
+          Card(
+            margin: const EdgeInsets.only(top: 8),
+            child: Column(
+              children: _locationResults
+                  .map(
+                    (place) => ListTile(
+                      leading: const CircleAvatar(
+                        child: Icon(Icons.place_outlined),
+                      ),
+                      title: Text(place.title),
+                      subtitle: Text(
+                        place.displayName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Chip(
+                        avatar: Icon(Icons.verified, size: 16),
+                        label: Text('Permitido'),
+                      ),
+                      onTap: () => _applyPlace(place),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        if (_locationTextCtrl.text.trim().isNotEmpty &&
+            _locationResults.isEmpty &&
+            _locationError == null)
+          Card(
+            margin: const EdgeInsets.only(top: 8),
+            color: Colors.green.shade50,
+            child: ListTile(
+              leading: Icon(Icons.verified, color: Colors.green.shade700),
+              title: const Text('Punto de encuentro seleccionado'),
+              subtitle: Text(_locationTextCtrl.text.trim()),
+            ),
+          ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 180,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(initialCenter: _location, initialZoom: 15),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'opentic.co.yalecaigo',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _location,
+                      width: 44,
+                      height: 44,
+                      child: const Icon(
+                        Icons.location_pin,
+                        size: 44,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _pickOnMap,
+          icon: const Icon(Icons.map_outlined),
+          label: const Text('Elegir en el mapa'),
+        ),
+      ],
+    );
+  }
+
+  Widget _scheduleField() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _needNow,
+              title: const Text('Lo necesito ahora'),
+              subtitle: const Text('Se programará desde la hora actual.'),
+              onChanged: (value) {
+                setState(() {
+                  _needNow = value;
+                  if (value) {
+                    _startTime = DateTime.now().add(const Duration(minutes: 5));
+                  }
+                });
+              },
+            ),
+            if (!_needNow)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_month),
+                title: const Text('Fecha y hora programada'),
+                subtitle: Text(formatDateTime(_startTime.toIso8601String())),
+                trailing: const Icon(Icons.edit),
+                onTap: _pickStartDateTime,
+              )
+            else
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule),
+                title: const Text('Inicio estimado'),
+                subtitle: Text(formatDateTime(_startTime.toIso8601String())),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _preferencesField() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Preferencias opcionales',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const Text(
+              'Toca una opción. Puedes dejar “Cualquiera”.',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            const Text('Género', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  avatar: const Icon(Icons.people_outline, size: 18),
+                  label: const Text('Cualquiera'),
+                  selected: _preferredGender == null,
+                  onSelected: (_) => setState(() => _preferredGender = null),
+                ),
+                ChoiceChip(
+                  avatar: const Icon(Icons.woman_2_outlined, size: 18),
+                  label: const Text('Mujer'),
+                  selected: _preferredGender == 'F',
+                  onSelected: (_) => setState(() => _preferredGender = 'F'),
+                ),
+                ChoiceChip(
+                  avatar: const Icon(Icons.man_2_outlined, size: 18),
+                  label: const Text('Hombre'),
+                  selected: _preferredGender == 'M',
+                  onSelected: (_) => setState(() => _preferredGender = 'M'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Text('Edad', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  avatar: const Icon(Icons.all_inclusive, size: 18),
+                  label: const Text('Cualquiera'),
+                  selected: _selectedAgeRange == null,
+                  onSelected: (_) => setState(() => _selectedAgeRange = null),
+                ),
+                ..._ageRanges.map(
+                  (range) => ChoiceChip(
+                    label: Text('${range.min}-${range.max}'),
+                    selected: _selectedAgeRange == range,
+                    onSelected: (_) => setState(() => _selectedAgeRange = range),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Crear solicitud')),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text(
+              'Cuéntanos qué necesitas',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _categoryField(),
+            const SizedBox(height: 16),
+            _locationField(),
+            const SizedBox(height: 16),
+            const Text(
+              '3. ¿Cuándo y por cuánto tiempo?',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            _scheduleField(),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<int>(
+              key: ValueKey(_durationMinutes),
+              initialValue: _durationMinutes,
+              decoration: const InputDecoration(
+                labelText: 'Duración estimada',
+                border: OutlineInputBorder(),
+              ),
+              items: _durationOptions
+                  .map(
+                    (minutes) => DropdownMenuItem<int>(
+                      value: minutes,
+                      child: Text('$minutes minutos'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _durationMinutes = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.payments_outlined),
+                title: const Text('Valor estimado'),
+                subtitle: const Text('El pago demo se confirma en el siguiente paso.'),
+                trailing: Text(
+                  formatCop(_estimatedPrice),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _preferencesField(),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _notesCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Indicaciones adicionales (opcional)',
+                hintText: 'Ej. Nos encontramos en la entrada principal.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _loading ? null : _submit,
+              icon: const Icon(Icons.arrow_forward),
+              label: Text(_loading ? 'Creando…' : 'Continuar al pago demo'),
+            ),
+            if (_result != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  _result!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -842,16 +699,15 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 }
 
 class _AgeRange {
-  final int min;
-  final int max;
   const _AgeRange(this.min, this.max);
 
-  @override
-  String toString() => '$min-$max';
+  final int min;
+  final int max;
 
   @override
-  bool operator ==(Object other) =>
-      other is _AgeRange && other.min == min && other.max == max;
+  bool operator ==(Object other) {
+    return other is _AgeRange && other.min == min && other.max == max;
+  }
 
   @override
   int get hashCode => Object.hash(min, max);
