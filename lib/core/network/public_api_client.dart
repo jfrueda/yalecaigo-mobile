@@ -6,9 +6,9 @@ import '../config/app_config.dart';
 class PublicApiClient {
   PublicApiClient._();
 
-  static final Dio dio = _buildClient();
+  static final Dio dio = _buildDio();
 
-  static Dio _buildClient() {
+  static Dio _buildDio() {
     final client = Dio(
       BaseOptions(
         baseUrl: AppConfig.normalizedBaseUrl,
@@ -23,39 +23,36 @@ class PublicApiClient {
       ),
     );
 
-    if (kDebugMode && AppConfig.enableNetworkLogs) {
-      client.interceptors.add(_SafePublicNetworkLogInterceptor());
+    if (AppConfig.enableNetworkLogs) {
+      client.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            debugPrint(
+              '[API PUBLIC] --> ${options.method} ${options.uri}',
+            );
+            handler.next(options);
+          },
+          onResponse: (response, handler) {
+            debugPrint(
+              '[API PUBLIC] <-- ${response.statusCode} '
+              '${response.requestOptions.method} '
+              '${response.requestOptions.uri}',
+            );
+            handler.next(response);
+          },
+          onError: (error, handler) {
+            debugPrint(
+              '[API PUBLIC] xx ${error.response?.statusCode ?? '-'} '
+              '${error.requestOptions.method} '
+              '${error.requestOptions.uri} '
+              'type=${error.type} message=${error.message}',
+            );
+            handler.next(error);
+          },
+        ),
+      );
     }
 
     return client;
-  }
-}
-
-/// Registra únicamente método, URL y estado HTTP.
-/// No imprime cuerpos, contraseñas, encabezados ni tokens.
-class _SafePublicNetworkLogInterceptor extends Interceptor {
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    debugPrint('[API PUBLIC] --> ${options.method} ${options.uri}');
-    handler.next(options);
-  }
-
-  @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
-    debugPrint(
-      '[API PUBLIC] <-- ${response.statusCode} '
-      '${response.requestOptions.method} ${response.requestOptions.uri}',
-    );
-    handler.next(response);
-  }
-
-  @override
-  void onError(DioException err, ErrorInterceptorHandler handler) {
-    debugPrint(
-      '[API PUBLIC] xx ${err.response?.statusCode ?? '-'} '
-      '${err.requestOptions.method} ${err.requestOptions.uri}: '
-      '${err.type.name}',
-    );
-    handler.next(err);
   }
 }

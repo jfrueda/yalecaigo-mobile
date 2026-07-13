@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/navigation/role_gate_page.dart';
 import '../data/auth_service.dart';
 import 'register_page.dart';
@@ -34,34 +36,62 @@ class _LoginPageState extends State<LoginPage> {
       _error = null;
     });
 
+    if (kDebugMode) {
+      debugPrint(
+        '[LOGIN] Backend: ${AppConfig.normalizedBaseUrl}',
+      );
+    }
+
     try {
       await _auth.login(_userCtrl.text, _passCtrl.text);
       if (!mounted) return;
+
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute<void>(builder: (_) => const RoleGatePage()),
         (_) => false,
       );
     } on DioException catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          '[LOGIN] DioException type=${error.type} '
+          'status=${error.response?.statusCode ?? '-'} '
+          'message=${error.message}',
+        );
+      }
+
       if (!mounted) return;
       final status = error.response?.statusCode;
+
       setState(() {
-        if (status == 401 || status == 400) {
+        if (status == 400 || status == 401) {
           _error = 'Usuario o contraseña inválidos.';
         } else if (error.type == DioExceptionType.connectionError ||
-            error.type == DioExceptionType.connectionTimeout) {
-          _error = 'No fue posible conectar con el backend.';
+            error.type == DioExceptionType.connectionTimeout ||
+            error.type == DioExceptionType.sendTimeout ||
+            error.type == DioExceptionType.receiveTimeout) {
+          _error =
+              'No fue posible conectar con el backend en '
+              '${AppConfig.normalizedBaseUrl}.';
         } else {
-          _error = 'El inicio de sesión falló (HTTP ${status ?? '-'}).';
+          _error =
+              'Error de conexión con la API '
+              '(HTTP ${status ?? '-'}, ${error.type.name}).';
         }
       });
     } on FormatException catch (error) {
       if (!mounted) return;
       setState(() => _error = error.message);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('[LOGIN] Error no controlado: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
       if (!mounted) return;
       setState(() => _error = 'No fue posible iniciar sesión.');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
