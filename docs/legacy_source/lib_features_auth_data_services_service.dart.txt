@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
+import '../../../core/network/endpoints.dart';
 
 class ServicesService {
   Future<Response<List<dynamic>>> listOffers() {
-    return ApiClient.dio.get<List<dynamic>>('/services/offers/');
+    return ApiClient.dio.get<List<dynamic>>(Endpoints.serviceOffers);
   }
 }

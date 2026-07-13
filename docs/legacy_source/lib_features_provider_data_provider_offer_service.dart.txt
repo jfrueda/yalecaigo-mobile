@@ -1,0 +1,18 @@
+import 'package:dio/dio.dart';
+
+import '../../../core/network/api_client.dart';
+import '../../../core/network/endpoints.dart';
+
+class ProviderOfferService {
+  Future<Response<dynamic>> listOffers() {
+    return ApiClient.dio.get(Endpoints.serviceOffers);
+  }
+
+  Future<Response<dynamic>> acceptOffer(int offerId) {
+    return ApiClient.dio.post(Endpoints.acceptOffer(offerId));
+  }
+
+  Future<Response<dynamic>> rejectOffer(int offerId) {
+    return ApiClient.dio.post(Endpoints.rejectOffer(offerId));
+  }
+}

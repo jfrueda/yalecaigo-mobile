@@ -2,37 +2,68 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../service_request/data/location_ping_service.dart';
+import '../../service_request/data/service_request_query_service.dart';
 
 class ProviderActiveServicePage extends StatefulWidget {
-  final Map<String, dynamic> serviceRequest;
-
   const ProviderActiveServicePage({super.key, required this.serviceRequest});
 
+  final Map<String, dynamic> serviceRequest;
+
   @override
-  State<ProviderActiveServicePage> createState() => _ProviderActiveServicePageState();
+  State<ProviderActiveServicePage> createState() =>
+      _ProviderActiveServicePageState();
 }
 
 class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
   final _pingService = LocationPingService();
+  final _queryService = ServiceRequestQueryService();
 
+  late Map<String, dynamic> _request;
   String? _result;
   bool _loading = false;
+  bool _refreshing = false;
 
-  int? get _srId {
-    final id = widget.serviceRequest['id'];
+  @override
+  void initState() {
+    super.initState();
+    _request = Map<String, dynamic>.from(widget.serviceRequest);
+  }
+
+  int? get _requestId {
+    final id = _request['id'];
     if (id is int) return id;
     return int.tryParse(id?.toString() ?? '');
   }
 
-  double _safeDouble(dynamic v, double fallback) {
-    if (v is num) return v.toDouble();
-    return double.tryParse(v?.toString() ?? '') ?? fallback;
+  double _asDouble(dynamic value, double fallback) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  Future<void> _refresh() async {
+    final id = _requestId;
+    if (id == null) return;
+    setState(() => _refreshing = true);
+    try {
+      final fresh = await _queryService.getRequestById(id);
+      if (!mounted) return;
+      if (fresh != null) setState(() => _request = fresh);
+    } on DioException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _result =
+            'No se pudo actualizar (HTTP '
+            '${error.response?.statusCode ?? '-'}).';
+      });
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   Future<void> _sendPing() async {
-    final id = _srId;
+    final id = _requestId;
     if (id == null) {
-      setState(() => _result = '❌ No tengo ID de solicitud para enviar ping');
+      setState(() => _result = 'No hay un ID válido de solicitud.');
       return;
     }
 
@@ -42,34 +73,46 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     });
 
     try {
-      final lat = _safeDouble(widget.serviceRequest['location_lat'], 4.6767);
-      final lng = _safeDouble(widget.serviceRequest['location_lng'], -74.0482);
-
-      final res = await _pingService.createPing(
+      final latitude = _asDouble(_request['location_lat'], 4.6767);
+      final longitude = _asDouble(_request['location_lng'], -74.0482);
+      await _pingService.createPing(
         serviceRequestId: id,
-        locationLat: lat,
-        locationLng: lng,
-        recordedAt: DateTime.now(),
+        locationLat: latitude,
+        locationLng: longitude,
+        source: 'simulated',
       );
-
-      setState(() => _result = '✅ Ping enviado (${res.statusCode}): ${res.data}');
-    } catch (e) {
-      String msg = '❌ Error enviando ping: $e';
-      if (e is DioException) msg = '❌ Error (${e.response?.statusCode}): ${e.response?.data}';
-      setState(() => _result = msg);
+      if (!mounted) return;
+      setState(() => _result = 'Ping de prueba enviado correctamente.');
+      await _refresh();
+    } on DioException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _result =
+            'Error ${error.response?.statusCode ?? '-'}: '
+            '${error.response?.data ?? error.message}';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _result = 'No fue posible enviar el ping de prueba.');
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Widget _kv(String k, dynamic v) {
+  Widget _row(String label, dynamic value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 150, child: Text('$k:', style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(v?.toString() ?? '—')),
+          SizedBox(
+            width: 150,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(child: Text(value?.toString() ?? '—')),
         ],
       ),
     );
@@ -77,40 +120,50 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
 
   @override
   Widget build(BuildContext context) {
-    final sr = widget.serviceRequest;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Servicio activo (Prestador)')),
-      body: Padding(
+      appBar: AppBar(
+        title: const Text('Servicio activo'),
+        actions: [
+          IconButton(
+            tooltip: 'Actualizar',
+            onPressed: _refreshing ? null : _refresh,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        child: ListView(
-          children: [
-            const Text('Solicitud', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-
-            _kv('ID', sr['id']),
-            _kv('Ubicación', sr['location_text']),
-            _kv('Lat', sr['location_lat']),
-            _kv('Lng', sr['location_lng']),
-            _kv('Inicio', sr['requested_start_time']),
-            _kv('Duración', sr['requested_duration_minutes']),
-            _kv('Estado', sr['status'] ?? 'active'),
-
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loading ? null : _sendPing,
-              icon: const Icon(Icons.my_location),
-              label: _loading ? const Text('Enviando...') : const Text('Enviar ping'),
-            ),
-
-            const SizedBox(height: 12),
-            if (_result != null)
-              Text(
-                _result!,
-                style: TextStyle(color: _result!.startsWith('✅') ? Colors.green : Colors.red),
+        children: [
+          if (_refreshing) const LinearProgressIndicator(),
+          const SizedBox(height: 8),
+          _row('ID', _request['id']),
+          _row('Categoría', _request['category_name']),
+          _row('Ubicación', _request['location_text']),
+          _row('Inicio', _request['requested_start_time']),
+          _row('Duración', _request['requested_duration_minutes']),
+          _row('Estado', _request['status']),
+          _row('Cliente', _request['client_username']),
+          const SizedBox(height: 16),
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                'Modo de desarrollo: este botón usa las coordenadas del punto '
+                'de encuentro. Todavía no captura el GPS real del teléfono.',
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _loading ? null : _sendPing,
+            icon: const Icon(Icons.my_location),
+            label: Text(_loading ? 'Enviando…' : 'Enviar ping de prueba'),
+          ),
+          if (_result != null) ...[
+            const SizedBox(height: 12),
+            Text(_result!, textAlign: TextAlign.center),
           ],
-        ),
+        ],
       ),
     );
   }

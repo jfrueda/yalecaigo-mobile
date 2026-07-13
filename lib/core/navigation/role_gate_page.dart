@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../features/auth/data/me_service.dart';
 import '../../features/auth/presentation/login_page.dart';
-import '../../features/service_request/presentation/create_request_page.dart';
-import '../../features/provider/presentation/provider_home_page.dart';
-import '../network/api_client.dart';
+import '../../features/home/presentation/home_page.dart';
+import '../../features/provider/presentation/available_requests_page.dart';
+import '../config/app_config.dart';
 import '../network/token_storage.dart';
 
 class RoleGatePage extends StatefulWidget {
@@ -15,15 +17,14 @@ class RoleGatePage extends StatefulWidget {
 }
 
 class _RoleGatePageState extends State<RoleGatePage> {
+  final _meService = MeService();
+
   bool _loading = true;
   String? _error;
-
-  String? _username;
   String? _role;
+  String? _status;
+  String? _username;
   bool _verified = false;
-
-  String _endpointUsed = '';
-  int? _httpStatus;
 
   @override
   void initState() {
@@ -32,51 +33,38 @@ class _RoleGatePageState extends State<RoleGatePage> {
   }
 
   Future<void> _loadProfile() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-      _endpointUsed = '';
-      _httpStatus = null;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
-      // 1) Preferimos /security/me/
-      Response res;
-      try {
-        _endpointUsed = '/security/me/';
-        res = await ApiClient.dio.get(_endpointUsed);
-      } on DioException catch (e) {
-        // 2) Fallback /auth/me/ (por si existe en tu backend)
-        if (e.response?.statusCode == 404) {
-          _endpointUsed = '/auth/me/';
-          res = await ApiClient.dio.get(_endpointUsed);
-        } else {
-          rethrow;
-        }
-      }
+      final profile = await _meService.getMe();
+      if (!mounted) return;
 
-      _httpStatus = res.statusCode;
-      final data = Map<String, dynamic>.from(res.data);
-
+      final status = profile['status']?.toString().toUpperCase();
       setState(() {
-        _username = data['username']?.toString();
-        _role = data['role']?.toString();
-        _verified = data['is_verified'] == true;
+        _username = profile['username']?.toString();
+        _role = profile['role']?.toString().toLowerCase();
+        _status = status;
+        _verified = profile['is_verified'] == true || status == 'VERIFIED';
         _loading = false;
       });
-    } catch (e) {
-      // NO limpiamos tokens a ciegas si quieres diagnosticar.
-      // Pero si prefieres forzar logout, descomenta el clear().
-      // await TokenStorage.clear();
-
-      String msg = 'No se pudo obtener el perfil';
-      if (e is DioException) {
-        msg = 'No se pudo obtener el perfil ($_endpointUsed) '
-            'HTTP=${e.response?.statusCode} data=${e.response?.data}';
-      }
-
+    } on DioException catch (error) {
+      if (!mounted) return;
+      final statusCode = error.response?.statusCode;
       setState(() {
-        _error = msg;
+        _error = statusCode == 401
+            ? 'La sesión venció o el token no es válido.'
+            : 'No se pudo consultar el perfil en el backend.';
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'La respuesta del perfil no tiene el formato esperado.';
         _loading = false;
       });
     }
@@ -86,192 +74,141 @@ class _RoleGatePageState extends State<RoleGatePage> {
     await TokenStorage.clear();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-          (_) => false,
+      MaterialPageRoute<void>(builder: (_) => const LoginPage()),
+      (_) => false,
     );
   }
+
+  String get _debugDetail =>
+      'API: ${AppConfig.normalizedBaseUrl}\n'
+      'Usuario: ${_username ?? '-'}\n'
+      'Rol: ${_role ?? '-'}\n'
+      'Estado: ${_status ?? '-'}';
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
-    final debugInfo = '''
-Endpoint: $_endpointUsed
-HTTP: ${_httpStatus ?? '-'}
-Usuario: ${_username ?? '—'}
-Rol: ${_role ?? '—'}
-Verificado: $_verified
-Pantalla destino: ${_targetPageName()}
-''';
 
     if (_error != null) {
-      return _debugScaffold(
-        title: 'ERROR',
-        actions: [
-          IconButton(
-            onPressed: _loadProfile,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(_error!, style: const TextStyle(color: Colors.red)),
-            const SizedBox(height: 12),
-            Text(debugInfo),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: _logout,
-              child: const Text('Volver a login'),
-            ),
-          ],
-        ),
+      return _MessagePage(
+        title: 'No fue posible iniciar',
+        message: _error!,
+        detail: kDebugMode ? _debugDetail : null,
+        primaryLabel: 'Reintentar',
+        onPrimary: _loadProfile,
+        onLogout: _logout,
       );
     }
 
-    if (!_verified) {
-      return _debugScaffold(
-        title: 'CUENTA NO VERIFICADA',
-        actions: [
-          IconButton(
-            onPressed: _loadProfile,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-        child: Text(debugInfo),
+    if (_status == 'SUSPENDED') {
+      return _MessagePage(
+        title: 'Cuenta suspendida',
+        message:
+            'La cuenta está suspendida. Debe ser reactivada desde el backend.',
+        detail: kDebugMode ? _debugDetail : null,
+        primaryLabel: 'Volver a consultar',
+        onPrimary: _loadProfile,
+        onLogout: _logout,
       );
     }
 
-    switch ((_role ?? '').toLowerCase()) {
+    // Los clientes pueden crear solicitudes mientras su verificación documental
+    // se completa. Los prestadores sí deben estar verificados antes de aceptar.
+    if (_role == 'provider' && !_verified) {
+      return _MessagePage(
+        title: 'Prestador pendiente de verificación',
+        message:
+            'El backend reconoció la cuenta de prestador, pero todavía no está '
+            'habilitada para aceptar servicios.',
+        detail: kDebugMode ? _debugDetail : null,
+        primaryLabel: 'Volver a consultar',
+        onPrimary: _loadProfile,
+        onLogout: _logout,
+      );
+    }
+
+    switch (_role) {
       case 'client':
-        return _debugScaffold(
-          title: 'CLIENTE',
-          actions: [
-            IconButton(
-              onPressed: _loadProfile,
-              icon: const Icon(Icons.refresh),
-            ),
-            IconButton(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout),
-            ),
-          ],
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(debugInfo),
-              const Divider(),
-              // OJO: esto anida un Scaffold si CreateRequestPage ya es Scaffold.
-              // Para MVP lo dejamos, pero si ves glitches visuales,
-              // el siguiente paso es convertir CreateRequestPage a "form widget".
-              const SizedBox(
-                height: 800, // evita Expanded dentro de scroll
-                child: CreateRequestPage(),
-              ),
-            ],
-          ),
-        );
-
+        return const HomePage();
       case 'provider':
-        return _debugScaffold(
-          title: 'PROVEEDOR',
-          actions: [
-            IconButton(
-              onPressed: _loadProfile,
-              icon: const Icon(Icons.refresh),
-            ),
-            IconButton(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout),
-            ),
-          ],
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(debugInfo),
-              const Divider(),
-              const SizedBox(
-                height: 800,
-                child: ProviderHomePage(),
-              ),
-            ],
-          ),
-        );
-
+        return const AvailableRequestsPage();
       case 'admin':
-        return _debugScaffold(
-          title: 'ADMIN',
-          actions: [
-            IconButton(
-              onPressed: _loadProfile,
-              icon: const Icon(Icons.refresh),
-            ),
-            IconButton(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout),
-            ),
-          ],
-          child: Text(debugInfo),
+        return _MessagePage(
+          title: 'Administrador',
+          message: 'El panel administrativo móvil aún no está implementado.',
+          detail: kDebugMode ? _debugDetail : null,
+          primaryLabel: 'Actualizar perfil',
+          onPrimary: _loadProfile,
+          onLogout: _logout,
         );
-
       default:
-        return _debugScaffold(
-          title: 'ROL DESCONOCIDO',
-          actions: [
-            IconButton(
-              onPressed: _loadProfile,
-              icon: const Icon(Icons.refresh),
-            ),
-            IconButton(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout),
-            ),
-          ],
-          child: Text(debugInfo),
+        return _MessagePage(
+          title: 'Rol no reconocido',
+          message: 'El backend devolvió el rol "${_role ?? 'vacío'}".',
+          detail: kDebugMode ? _debugDetail : null,
+          primaryLabel: 'Reintentar',
+          onPrimary: _loadProfile,
+          onLogout: _logout,
         );
     }
   }
+}
 
-  String _targetPageName() {
-    if (!_verified) return 'NotVerified';
-    switch ((_role ?? '').toLowerCase()) {
-      case 'client':
-        return 'CreateRequestPage';
-      case 'provider':
-        return 'ProviderHomePage';
-      case 'admin':
-        return 'AdminPlaceholder';
-      default:
-        return 'UnknownRole';
-    }
-  }
+class _MessagePage extends StatelessWidget {
+  const _MessagePage({
+    required this.title,
+    required this.message,
+    required this.primaryLabel,
+    required this.onPrimary,
+    required this.onLogout,
+    this.detail,
+  });
 
-  Widget _debugScaffold({
-    required String title,
-    required Widget child,
-    List<Widget>? actions,
-  }) {
+  final String title;
+  final String message;
+  final String primaryLabel;
+  final String? detail;
+  final VoidCallback onPrimary;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('DEBUG ROL – $title'),
-        backgroundColor: Colors.deepPurple,
-        actions: actions,
+        title: Text(title),
+        actions: [
+          IconButton(
+            tooltip: 'Cerrar sesión',
+            onPressed: onLogout,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(child: child),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(message, textAlign: TextAlign.center),
+                if (detail != null) ...[
+                  const SizedBox(height: 16),
+                  SelectableText(
+                    detail!,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                FilledButton(onPressed: onPrimary, child: Text(primaryLabel)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

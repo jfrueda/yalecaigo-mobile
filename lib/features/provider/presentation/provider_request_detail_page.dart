@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/endpoints.dart';
 
 class ProviderRequestDetailPage extends StatefulWidget {
   final Map<String, dynamic> request;
@@ -49,7 +50,8 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
   int? get _id => _i(_req['id']);
   bool get _isPending => _s(_req['status'], '').toLowerCase() == 'pending';
   bool get _hasProvider =>
-      _req.containsKey('assigned_provider') && _req['assigned_provider'] != null;
+      _req.containsKey('assigned_provider') &&
+      _req['assigned_provider'] != null;
 
   LatLng get _latLng {
     final lat = _d(_req['location_lat']) ?? 4.6767;
@@ -70,7 +72,7 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
     });
 
     try {
-      final res = await ApiClient.dio.post('/services/requests/$id/accept/');
+      final res = await ApiClient.dio.post(Endpoints.acceptRequest(id));
       final updated = Map<String, dynamic>.from(res.data ?? {});
       if (!mounted) return;
 
@@ -89,7 +91,7 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
       if (e is DioException) {
         msg = '❌ Error (${e.response?.statusCode}): ${e.response?.data}';
       }
-      setState(() => _msg = msg);
+      if (mounted) setState(() => _msg = msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -109,10 +111,7 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
       child: SizedBox(
         height: 200,
         child: FlutterMap(
-          options: MapOptions(
-            initialCenter: point,
-            initialZoom: 15,
-          ),
+          options: MapOptions(initialCenter: point, initialZoom: 15),
           children: [
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -137,7 +136,10 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
     final ageMin = _s(_req['preferred_age_min'], '');
     final ageMax = _s(_req['preferred_age_max'], '');
     final ageLabel =
-    (ageMin.isNotEmpty && ageMin != '-' && ageMax.isNotEmpty && ageMax != '-')
+        (ageMin.isNotEmpty &&
+            ageMin != '-' &&
+            ageMax.isNotEmpty &&
+            ageMax != '-')
         ? '$ageMin a $ageMax'
         : 'Sin preferencia';
 
@@ -146,9 +148,10 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(locationText,
-              style:
-              const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            locationText,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
           Text('Estado: $status'),
           const SizedBox(height: 8),
@@ -164,8 +167,10 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Preferencias',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Preferencias',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   Text('Género: $preferredGender'),
                   Text('Edad: $ageLabel'),
@@ -182,10 +187,10 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
               icon: const Icon(Icons.check),
               label: _loading
                   ? const SizedBox(
-                height: 18,
-                width: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Text('Aceptar solicitud'),
             ),
 

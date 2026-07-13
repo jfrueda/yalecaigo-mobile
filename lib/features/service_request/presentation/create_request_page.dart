@@ -160,7 +160,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       lastDate: now.add(const Duration(days: 30)),
       initialDate: now,
     );
-    if (date == null) return;
+    if (date == null || !mounted) return;
 
     final time = await showTimePicker(
       context: context,
@@ -169,8 +169,13 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     if (time == null) return;
 
     setState(() {
-      _startTime =
-          DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _startTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
     });
   }
 
@@ -241,7 +246,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         _locationResults = results;
         _locationHintError = allowed.isEmpty
             ? 'No encontramos lugares públicos válidos en la ciudad permitida. '
-            'Prueba con un parque, café o centro comercial.'
+                  'Prueba con un parque, café o centro comercial.'
             : null;
       });
     } catch (e) {
@@ -268,7 +273,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       _latCtrl.text = _fmtCoord(p.lat);
       _lngCtrl.text = _fmtCoord(p.lng);
       _locationResults = [];
-      _locationHintError = p.isAllowed ? null : (p.rejectReason ?? _locationHintError);
+      _locationHintError = p.isAllowed
+          ? null
+          : (p.rejectReason ?? _locationHintError);
     });
 
     _moveMapSafe(_location, 16);
@@ -281,42 +288,37 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   }
 
   Future<void> _pickOnMap() async {
-    final res = await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PickLocationPage(
-          initialPosition: _location,
-        ),
+    final result = await Navigator.of(context).push<PickedLocation>(
+      MaterialPageRoute<PickedLocation>(
+        builder: (_) => PickLocationPage(initialPosition: _location),
       ),
     );
 
-    if (res is Map) {
-      final lat = res['lat'];
-      final lng = res['lng'];
-      final label = res['label'];
+    if (result == null || !mounted) return;
 
-      final dLat = (lat is num) ? lat.toDouble() : double.tryParse('$lat');
-      final dLng = (lng is num) ? lng.toDouble() : double.tryParse('$lng');
+    final dLat = result.point.latitude;
+    final dLng = result.point.longitude;
+    final label = result.name?.trim();
 
-      if (dLat != null && dLng != null) {
-        setState(() {
-          _location = LatLng(dLat, dLng);
-          _latCtrl.text = _fmtCoord(dLat);
-          _lngCtrl.text = _fmtCoord(dLng);
-          if (label is String && label.trim().isNotEmpty) {
-            _suppressLocationListener = true;
-            _locationTextCtrl.text = label.trim();
-            Future.microtask(() {
-              if (!mounted) return;
-              _suppressLocationListener = false;
-            });
-          }
-          _locationResults = [];
-          _locationHintError = null;
-        });
-
-        _moveMapSafe(_location, 16);
+    setState(() {
+      _location = LatLng(dLat, dLng);
+      _latCtrl.text = _fmtCoord(dLat);
+      _lngCtrl.text = _fmtCoord(dLng);
+      if (label != null && label.isNotEmpty) {
+        _suppressLocationListener = true;
+        _locationTextCtrl.text = label;
       }
+      _locationResults = [];
+      _locationHintError = null;
+    });
+
+    if (label != null && label.isNotEmpty) {
+      Future.microtask(() {
+        if (mounted) _suppressLocationListener = false;
+      });
     }
+
+    _moveMapSafe(_location, 16);
   }
 
   // -----------------------------
@@ -359,6 +361,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         locationLng: lngValue,
         requestedStartTime: _startTime!.toUtc(),
         requestedDurationMinutes: _durationMinutes,
+        notes: _notesCtrl.text.trim(),
         preferredGender: _preferredGender,
         preferredAgeMin: preferredAgeMin,
         preferredAgeMax: preferredAgeMax,
@@ -375,8 +378,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       created['location_lat'] ??= lat;
       created['location_lng'] ??= lng;
       created['requested_duration_minutes'] ??= _durationMinutes;
-      created['requested_start_time'] ??=
-          _startTime!.toUtc().toIso8601String();
+      created['requested_start_time'] ??= _startTime!.toUtc().toIso8601String();
 
       created['preferred_gender'] ??= _preferredGender;
       created['preferred_age_min'] ??= preferredAgeMin;
@@ -394,26 +396,28 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         if (active != null) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-                builder: (_) => RequestDetailPage(request: active)),
+              builder: (_) => RequestDetailPage(request: active),
+            ),
           );
           return;
         }
 
-        setState(() => _result = '❌ No tengo ID válido de solicitud. Revisa backend.');
+        setState(
+          () => _result = '❌ No tengo ID válido de solicitud. Revisa backend.',
+        );
         return;
       }
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-            builder: (_) => RequestDetailPage(request: created)),
+        MaterialPageRoute(builder: (_) => RequestDetailPage(request: created)),
       );
     } catch (e) {
       String msg = '❌ Error creando solicitud: $e';
       if (e is DioException) {
         msg = '❌ Error (${e.response?.statusCode}): ${e.response?.data}';
       }
-      setState(() => _result = msg);
+      if (mounted) setState(() => _result = msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -432,7 +436,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 
     if (_categories.isNotEmpty) {
       return DropdownButtonFormField<int>(
-        value: _selectedCategoryId,
+        initialValue: _selectedCategoryId,
         decoration: const InputDecoration(
           labelText: 'Categoría',
           border: OutlineInputBorder(),
@@ -440,10 +444,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         items: _categories
             .map(
               (c) => DropdownMenuItem<int>(
-            value: c.id,
-            child: Text('${c.name} (ID: ${c.id})'),
-          ),
-        )
+                value: c.id,
+                child: Text('${c.name} (ID: ${c.id})'),
+              ),
+            )
             .toList(),
         onChanged: (v) => setState(() => _selectedCategoryId = v),
       );
@@ -473,17 +477,16 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 
   Widget _durationSelector() {
     return DropdownButtonFormField<int>(
-      value: _durationMinutes,
+      initialValue: _durationMinutes,
       decoration: const InputDecoration(
         labelText: 'Duración (minutos)',
         border: OutlineInputBorder(),
         helperText: 'Mínimo 30 min, máximo 3 horas',
       ),
       items: _durationOptions
-          .map((m) => DropdownMenuItem<int>(
-        value: m,
-        child: Text('$m minutos'),
-      ))
+          .map(
+            (m) => DropdownMenuItem<int>(value: m, child: Text('$m minutos')),
+          )
           .toList(),
       onChanged: (v) {
         if (v == null) return;
@@ -500,8 +503,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Valor estimado',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Valor estimado',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             Text('${_formatCop(price)} COP'),
           ],
         ),
@@ -519,8 +524,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Preferencias',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Preferencias',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
@@ -556,7 +563,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
             ),
             const Divider(height: 24),
             DropdownButtonFormField<_AgeRange?>(
-              value: _selectedAgeRange,
+              initialValue: _selectedAgeRange,
               decoration: const InputDecoration(
                 labelText: 'Rango de edad (opcional)',
                 border: OutlineInputBorder(),
@@ -567,7 +574,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                   child: Text('Sin preferencia'),
                 ),
                 ..._ageRanges.map(
-                      (r) => DropdownMenuItem<_AgeRange?>(
+                  (r) => DropdownMenuItem<_AgeRange?>(
                     value: r,
                     child: Text('${r.min} a ${r.max}'),
                   ),
@@ -615,8 +622,8 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                   children: [
                     TileLayer(
                       urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'opentic.co.yalecaigo',
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'co.opentic.yalecaigo',
                     ),
                     MarkerLayer(markers: [marker]),
                   ],
@@ -629,8 +636,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                 Expanded(
                   child: TextFormField(
                     controller: _latCtrl,
-                    keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Latitud',
                       border: OutlineInputBorder(),
@@ -643,7 +651,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                     onChanged: (v) {
                       final d = double.tryParse(v.trim());
                       if (d == null) return;
-                      setState(() => _location = LatLng(d, _location.longitude));
+                      setState(
+                        () => _location = LatLng(d, _location.longitude),
+                      );
                     },
                   ),
                 ),
@@ -651,8 +661,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                 Expanded(
                   child: TextFormField(
                     controller: _lngCtrl,
-                    keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Longitud',
                       border: OutlineInputBorder(),
@@ -680,7 +691,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
             const SizedBox(height: 8),
             const Text(
               'Solo puntos públicos (parques, cafés, centros comerciales). '
-                  'No hoteles ni residencias. Debe estar dentro de la ciudad permitida.',
+              'No hoteles ni residencias. Debe estar dentro de la ciudad permitida.',
               style: TextStyle(color: Colors.grey),
             ),
           ],
@@ -706,10 +717,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         if (hint != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              hint,
-              style: const TextStyle(color: Colors.red),
-            ),
+            child: Text(hint, style: const TextStyle(color: Colors.red)),
           ),
         if (results.isNotEmpty)
           Card(
@@ -722,7 +730,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                   dense: true,
                   title: Text(r.title),
                   subtitle: Text(
-                    allowed ? subtitle : '${subtitle}\n${r.rejectReason ?? ''}',
+                    allowed ? subtitle : '$subtitle\n${r.rejectReason ?? ''}',
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -757,8 +765,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
             children: [
               _categorySelector(),
               const SizedBox(height: 8),
-              Text('Nombre categoría: $categoryName',
-                  style: const TextStyle(color: Colors.grey)),
+              Text(
+                'Nombre categoría: $categoryName',
+                style: const TextStyle(color: Colors.grey),
+              ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _locationTextCtrl,
@@ -781,8 +791,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
               const SizedBox(height: 12),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Fecha/hora inicio',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                title: const Text(
+                  'Fecha/hora inicio',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 subtitle: Text(
                   _startTime == null
                       ? 'Selecciona fecha y hora'
@@ -807,10 +819,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                 onPressed: _loading ? null : _submit,
                 child: _loading
                     ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Text('Crear solicitud'),
               ),
               const SizedBox(height: 12),

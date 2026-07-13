@@ -1,24 +1,33 @@
 import 'package:dio/dio.dart';
-import 'token_storage.dart';
+
 import 'endpoints.dart';
 import 'refresh_dio.dart';
+import 'token_storage.dart';
 
 class AuthInterceptor extends Interceptor {
-  final Dio dio;
-  bool _refreshing = false;
-
   AuthInterceptor(this.dio);
+
+  final Dio dio;
+  Future<String?>? _refreshFuture;
+
+  bool _isPublicAuthPath(String path) {
+    return path == Endpoints.tokenObtain ||
+        path == Endpoints.tokenRefresh ||
+        path == Endpoints.register;
+  }
 
   @override
   Future<void> onRequest(
-      RequestOptions options, RequestInterceptorHandler handler) async {
-    // ❌ NO interceptar auth
-    if (options.path.startsWith('/auth/')) {
-      return handler.next(options);
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    if (_isPublicAuthPath(options.path)) {
+      handler.next(options);
+      return;
     }
 
     final token = await TokenStorage.getAccessToken();
-    if (token != null) {
+    if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
 
@@ -27,41 +36,67 @@ class AuthInterceptor extends Interceptor {
 
   @override
   Future<void> onError(
-      DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode != 401 ||
-        _refreshing ||
-        err.requestOptions.path.startsWith('/auth/')) {
-      return handler.next(err);
-    }
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final request = err.requestOptions;
+    final shouldRefresh =
+        err.response?.statusCode == 401 &&
+        !_isPublicAuthPath(request.path) &&
+        request.extra['_jwtRetried'] != true;
 
-    _refreshing = true;
+    if (!shouldRefresh) {
+      handler.next(err);
+      return;
+    }
 
     try {
-      final refresh = await TokenStorage.getRefreshToken();
-      if (refresh == null) throw Exception('No refresh');
+      final future = _refreshFuture ??= _refreshAccessToken();
+      final newAccess = await future;
+      _refreshFuture = null;
 
-      final res = await refreshDio.post(
-        Endpoints.tokenRefresh,
-        data: {'refresh': refresh},
-      );
+      if (newAccess == null || newAccess.isEmpty) {
+        await TokenStorage.clear();
+        handler.next(err);
+        return;
+      }
 
-      final newAccess = res.data['access'] as String;
-      await TokenStorage.saveTokens(
-        access: newAccess,
-        refresh: refresh,
-      );
-
-      _refreshing = false;
-
-      final retry = err.requestOptions;
-      retry.headers['Authorization'] = 'Bearer $newAccess';
-
-      final response = await dio.fetch(retry);
-      return handler.resolve(response);
-    } catch (e) {
-      _refreshing = false;
+      request.extra['_jwtRetried'] = true;
+      request.headers['Authorization'] = 'Bearer $newAccess';
+      final response = await dio.fetch<dynamic>(request);
+      handler.resolve(response);
+    } catch (_) {
+      _refreshFuture = null;
       await TokenStorage.clear();
-      return handler.next(err);
+      handler.next(err);
     }
+  }
+
+  Future<String?> _refreshAccessToken() async {
+    final currentRefresh = await TokenStorage.getRefreshToken();
+    if (currentRefresh == null || currentRefresh.isEmpty) {
+      return null;
+    }
+
+    final response = await refreshDio.post<Map<String, dynamic>>(
+      Endpoints.tokenRefresh,
+      data: {'refresh': currentRefresh},
+    );
+
+    final payload = response.data;
+    final access = payload?['access']?.toString();
+    if (access == null || access.isEmpty) {
+      return null;
+    }
+
+    final rotatedRefresh = payload?['refresh']?.toString();
+    await TokenStorage.saveTokens(
+      access: access,
+      refresh: (rotatedRefresh == null || rotatedRefresh.isEmpty)
+          ? currentRefresh
+          : rotatedRefresh,
+    );
+
+    return access;
   }
 }

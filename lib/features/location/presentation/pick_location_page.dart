@@ -58,19 +58,17 @@ class _PickLocationPageState extends State<PickLocationPage> {
             options: MapOptions(
               initialCenter: _selected,
               initialZoom: 16,
-              onPositionChanged: (pos, _) {
-                if (pos.center != null) {
-                  setState(() {
-                    _selected = pos.center!;
-                    _placeName = null; // invalida nombre al mover
-                  });
-                }
+              onPositionChanged: (position, _) {
+                setState(() {
+                  _selected = position.center;
+                  _placeName = null; // invalida nombre al mover
+                });
               },
             ),
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'opentic.co.yalecaigo',
+                userAgentPackageName: 'co.opentic.yalecaigo',
               ),
               MarkerLayer(
                 markers: [
@@ -78,7 +76,11 @@ class _PickLocationPageState extends State<PickLocationPage> {
                     point: _selected,
                     width: 40,
                     height: 40,
-                    child: const Icon(Icons.location_pin, color: Colors.red, size: 40),
+                    child: const Icon(
+                      Icons.location_pin,
+                      color: Colors.red,
+                      size: 40,
+                    ),
                   ),
                 ],
               ),
@@ -118,12 +120,16 @@ class _PickLocationPageState extends State<PickLocationPage> {
                             onPressed: _resolving ? null : _resolveName,
                             icon: _resolving
                                 ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
                                 : const Icon(Icons.place),
-                            label: Text(_resolving ? 'Buscando…' : 'Buscar nombre'),
+                            label: Text(
+                              _resolving ? 'Buscando…' : 'Buscar nombre',
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -131,7 +137,10 @@ class _PickLocationPageState extends State<PickLocationPage> {
                           child: ElevatedButton(
                             onPressed: () {
                               Navigator.of(context).pop(
-                                PickedLocation(point: _selected, name: _placeName),
+                                PickedLocation(
+                                  point: _selected,
+                                  name: _placeName,
+                                ),
                               );
                             },
                             child: const Text('Confirmar'),

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'core/network/token_storage.dart';
+
 import 'core/navigation/role_gate_page.dart';
+import 'core/network/token_storage.dart';
+import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/login_page.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -19,17 +22,17 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Acompañante',
-      theme: ThemeData(useMaterial3: true),
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
       home: FutureBuilder<bool>(
         future: _hasSession(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (snapshot.connectionState != ConnectionState.done) {
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             );
           }
-
-          return snapshot.data!
+          return snapshot.data == true
               ? const RoleGatePage()
               : const LoginPage();
         },

@@ -15,7 +15,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
   late Future<List<Map<String, dynamic>>> _future;
   final _searchCtrl = TextEditingController();
 
-  static const _activeStatuses = ['pending', 'matched', 'started'];
+  static const _activeStatuses = ['pending', 'searching', 'matched', 'started'];
 
   // Histórico: mostrar primero solo los últimos 20
   static const int _initialHistoryLimit = 20;
@@ -37,9 +37,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
   Future<List<Map<String, dynamic>>> _load() async {
     final raw = await _service.listMyRequests();
     // Normalizamos a Map<String, dynamic>
-    final list = raw
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .toList();
+    final list = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
     // Ya vienen ordenadas por -created_at desde backend, pero por seguridad:
     list.sort((a, b) {
@@ -122,7 +120,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
           final history = <Map<String, dynamic>>[];
 
           for (final r in filtered) {
-            final status = _s(r['status'], fallback: 'unknown');
+            final status = _s(r['status'], fallback: 'unknown').toLowerCase();
             if (_activeStatuses.contains(status)) {
               active.add(r);
             } else {
@@ -136,7 +134,8 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
               ? history
               : history.take(_historyLimit).toList();
 
-          final canShowMore = !showAllHistory && history.length > limitedHistory.length;
+          final canShowMore =
+              !showAllHistory && history.length > limitedHistory.length;
 
           return ListView(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -151,10 +150,10 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                     suffixIcon: query.isEmpty
                         ? null
                         : IconButton(
-                      tooltip: 'Limpiar',
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => _searchCtrl.clear(),
-                    ),
+                            tooltip: 'Limpiar',
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => _searchCtrl.clear(),
+                          ),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -202,12 +201,16 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                           _historyLimit += 20;
                         });
                       },
-                      child: Text('Ver más (${history.length - limitedHistory.length} restantes)'),
+                      child: Text(
+                        'Ver más (${history.length - limitedHistory.length} restantes)',
+                      ),
                     ),
                   ),
                 ],
 
-                if (!canShowMore && query.isEmpty && history.length > _initialHistoryLimit) ...[
+                if (!canShowMore &&
+                    query.isEmpty &&
+                    history.length > _initialHistoryLimit) ...[
                   const SizedBox(height: 8),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -243,16 +246,12 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: ListTile(
         title: Text('Solicitud #$id — ${status.toUpperCase()}'),
-        subtitle: Text(
-          '$loc\nCreada: $created\nFinal: $ended\nValor: $price',
-        ),
+        subtitle: Text('$loc\nCreada: $created\nFinal: $ended\nValor: $price'),
         isThreeLine: true,
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
           Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => RequestDetailPage(request: r),
-            ),
+            MaterialPageRoute(builder: (_) => RequestDetailPage(request: r)),
           );
         },
       ),

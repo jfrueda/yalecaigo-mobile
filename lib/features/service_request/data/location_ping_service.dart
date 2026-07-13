@@ -1,23 +1,24 @@
 import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
+import '../../../core/network/endpoints.dart';
 
 class LocationPingService {
   Future<Response<dynamic>> createPing({
     required int serviceRequestId,
     required double locationLat,
     required double locationLng,
-    required DateTime recordedAt,
+    String source = 'simulated',
   }) {
     return ApiClient.dio.post(
-      '/services/location-pings/',
+      Endpoints.locationPings,
       data: {
-        "service_request": serviceRequestId,
-        "latitude": locationLat,     // ✅ backend espera latitude
-        "longitude": locationLng,    // ✅ backend espera longitude
-        "accuracy": 10.0,            // ✅ requerido por serializer
-        "recorded_at": recordedAt.toUtc().toIso8601String(),
+        'service_request': serviceRequestId,
+        'latitude': locationLat,
+        'longitude': locationLng,
+        'accuracy': 10.0,
+        'source': source,
       },
     );
   }
 }
-

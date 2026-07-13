@@ -1,43 +1,41 @@
 import '../../../core/network/api_client.dart';
+import '../../../core/network/endpoints.dart';
 
 class CategoryItem {
+  const CategoryItem({required this.id, required this.name});
+
   final int id;
   final String name;
 
-  const CategoryItem({required this.id, required this.name});
-
   factory CategoryItem.fromJson(Map<String, dynamic> json) {
-    final id = json['id'];
-    final name = json['name'] ?? json['title'] ?? json['label'] ?? 'Sin nombre';
+    final rawId = json['id'];
+    final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+    if (id == null) {
+      throw const FormatException('La categoría no contiene un id válido.');
+    }
+
+    final rawName = json['name'] ?? json['title'] ?? json['label'];
     return CategoryItem(
-      id: (id is int) ? id : int.parse(id.toString()),
-      name: name.toString(),
+      id: id,
+      name: rawName?.toString().trim().isNotEmpty == true
+          ? rawName.toString().trim()
+          : 'Sin nombre',
     );
   }
 }
 
 class CategoryService {
-  /// Espera que exista un endpoint tipo:
-  /// GET /api/services/categories/  -> [{id, name}, ...]
-  /// (BaseUrl ya trae /api si tu ApiClient está configurado como antes)
   Future<List<CategoryItem>> listCategories() async {
-    final res = await ApiClient.dio.get('/services/categories/');
-    final data = res.data;
-
-    if (data is List) {
-      return data
-          .map((e) => CategoryItem.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList();
+    final response = await ApiClient.dio.get(Endpoints.categories);
+    dynamic raw = response.data;
+    if (raw is Map && raw['results'] is List) {
+      raw = raw['results'];
     }
+    if (raw is! List) return const [];
 
-    // Soporte por si viene paginado: {results:[...]}
-    if (data is Map && data['results'] is List) {
-      final results = data['results'] as List;
-      return results
-          .map((e) => CategoryItem.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList();
-    }
-
-    return [];
+    return raw
+        .whereType<Map>()
+        .map((item) => CategoryItem.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
   }
 }

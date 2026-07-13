@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 
 class LocationRules {
   final List<String> allowedCities; // e.g. ['Bogotá', 'Bogota']
@@ -34,7 +32,14 @@ class LocationRules {
   /// - Bloquea hoteles / residencias
   factory LocationRules.defaultBogota() {
     return LocationRules(
-      allowedCities: const ['Bogotá', 'Bogota', 'Bogotá D.C.', 'Bogota D.C.', 'Bogotá, D.C.', 'Bogota, D.C.'],
+      allowedCities: const [
+        'Bogotá',
+        'Bogota',
+        'Bogotá D.C.',
+        'Bogota D.C.',
+        'Bogotá, D.C.',
+        'Bogota, D.C.',
+      ],
       countryCode: 'co',
       allowedClassTypes: const {
         'amenity',
@@ -81,29 +86,13 @@ class LocationRules {
         },
 
         // Comercio / centros comerciales
-        'shop': {
-          'mall',
-          'supermarket',
-          'department_store',
-          'convenience',
-        },
+        'shop': {'mall', 'supermarket', 'department_store', 'convenience'},
 
         // Turismo / público
-        'tourism': {
-          'attraction',
-          'museum',
-          'gallery',
-          'viewpoint',
-          'zoo',
-        },
+        'tourism': {'attraction', 'museum', 'gallery', 'viewpoint', 'zoo'},
 
         // Lugares (plazas, barrios) – útil cuando Nominatim no clasifica como amenity/leisure
-        'place': {
-          'square',
-          'neighbourhood',
-          'suburb',
-          'locality',
-        },
+        'place': {'square', 'neighbourhood', 'suburb', 'locality'},
 
         // Edificios (a veces “Gran Estación” viene como building=retail o building=commercial)
         'building': {
@@ -186,19 +175,20 @@ class LocationSearchService {
   final LocationRules _rules;
 
   LocationSearchService({Dio? dio, LocationRules? rules})
-      : _dio = dio ??
-      Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 15),
-          headers: const {
-            'Accept': 'application/json',
-            // Nominatim pide User-Agent identificable; pon uno simple
-            'User-Agent': 'yalecaigo-mvp/1.0 (contact: dev@local)',
-          },
-        ),
-      ),
-        _rules = rules ?? LocationRules.defaultBogota();
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 15),
+              headers: const {
+                'Accept': 'application/json',
+                // Nominatim pide User-Agent identificable; pon uno simple
+                'User-Agent': 'yalecaigo-mvp/1.0 (contact: dev@local)',
+              },
+            ),
+          ),
+      _rules = rules ?? LocationRules.defaultBogota();
 
   // -------------------------
   // Public API
@@ -232,7 +222,7 @@ class LocationSearchService {
     final places = <LocationPlace>[];
     for (final item in data) {
       if (item is! Map) continue;
-      final m = Map<String, dynamic>.from(item as Map);
+      final m = Map<String, dynamic>.from(item);
 
       final displayName = (m['display_name'] ?? '').toString();
       final lat = double.tryParse((m['lat'] ?? '').toString());
@@ -244,7 +234,12 @@ class LocationSearchService {
 
       final title = _bestTitle(m);
 
-      final v = _validate(m, displayName: displayName, osmClass: osmClass, osmType: osmType);
+      final v = _validate(
+        m,
+        displayName: displayName,
+        osmClass: osmClass,
+        osmType: osmType,
+      );
       places.add(
         LocationPlace(
           title: title,
@@ -292,7 +287,12 @@ class LocationSearchService {
     final osmClass = m['class']?.toString();
     final osmType = m['type']?.toString();
 
-    final v = _validate(m, displayName: displayName, osmClass: osmClass, osmType: osmType);
+    final v = _validate(
+      m,
+      displayName: displayName,
+      osmClass: osmClass,
+      osmType: osmType,
+    );
     return LocationPlace(
       title: _bestTitle(m),
       displayName: displayName,
@@ -311,15 +311,18 @@ class LocationSearchService {
   // -------------------------
 
   (bool, String?) _validate(
-      Map<String, dynamic> raw, {
-        required String displayName,
-        required String? osmClass,
-        required String? osmType,
-      }) {
+    Map<String, dynamic> raw, {
+    required String displayName,
+    required String? osmClass,
+    required String? osmType,
+  }) {
     // 1) Bloqueo por keywords (hotel/residencia)
     final nameToCheck = '${_bestTitle(raw)} $displayName'.toLowerCase();
     if (_rules.isBlockedByKeyword(nameToCheck)) {
-      return (false, 'Lugar no permitido (hotel/residencia). Elige un punto público.');
+      return (
+        false,
+        'Lugar no permitido (hotel/residencia). Elige un punto público.',
+      );
     }
 
     // 2) Ciudad permitida (match flexible)
@@ -330,8 +333,13 @@ class LocationSearchService {
     // 3) Bloqueo por class/type duros
     if (osmClass != null) {
       final blockedTypes = _rules.blockedClassTypes[osmClass];
-      if (blockedTypes != null && osmType != null && blockedTypes.contains(osmType)) {
-        return (false, 'Lugar no permitido por tipo (alojamiento/residencial).');
+      if (blockedTypes != null &&
+          osmType != null &&
+          blockedTypes.contains(osmType)) {
+        return (
+          false,
+          'Lugar no permitido por tipo (alojamiento/residencial).',
+        );
       }
     }
 
@@ -347,7 +355,10 @@ class LocationSearchService {
     }
 
     // Si no se pudo clasificar, lo marcamos bloqueado pero con mensaje claro.
-    return (false, 'No parece un punto público válido. Prueba parque, café o centro comercial.');
+    return (
+      false,
+      'No parece un punto público válido. Prueba parque, café o centro comercial.',
+    );
   }
 
   bool _isAllowedByClassType(String? osmClass, String? osmType) {

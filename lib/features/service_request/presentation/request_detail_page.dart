@@ -26,7 +26,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   bool _refreshing = false;
   bool _sendingPing = false;
 
-  static const _activeStatuses = ['pending', 'matched', 'started'];
+  static const _activeStatuses = ['pending', 'searching', 'matched', 'started'];
 
   @override
   void initState() {
@@ -65,10 +65,13 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     return null;
   }
 
-  bool _isActiveStatus() {
-    final status = _s(_request['status'], fallback: 'unknown');
-    return _activeStatuses.contains(status);
-  }
+  String get _currentStatus =>
+      _s(_request['status'], fallback: 'unknown').toLowerCase();
+
+  bool _isActiveStatus() => _activeStatuses.contains(_currentStatus);
+
+  bool _canSendLocation() =>
+      const {'matched', 'started'}.contains(_currentStatus);
 
   // -----------------------------
   // Auto-refresh (B)
@@ -118,14 +121,17 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       return;
     }
 
-    // MVP: si ya no está activa, no enviamos pings
-    if (!_isActiveStatus()) {
-      _snack('ℹ️ La solicitud no está activa. No se envían pings.');
+    if (!_canSendLocation()) {
+      _snack(
+        'La ubicación se habilita después de que un prestador acepta la solicitud.',
+      );
       return;
     }
 
-    final lat = _d(_request['location_lat']) ?? _d(_request['latitude']) ?? 4.6767;
-    final lng = _d(_request['location_lng']) ?? _d(_request['longitude']) ?? -74.0482;
+    final lat =
+        _d(_request['location_lat']) ?? _d(_request['latitude']) ?? 4.6767;
+    final lng =
+        _d(_request['location_lng']) ?? _d(_request['longitude']) ?? -74.0482;
 
     setState(() => _sendingPing = true);
     try {
@@ -133,11 +139,11 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         serviceRequestId: id,
         locationLat: lat,
         locationLng: lng,
-        recordedAt: DateTime.now(),
+        source: 'simulated',
       );
 
       final data = res.data;
-      _snack('✅ Ping enviado (201): $data');
+      _snack('Ubicación simulada enviada: $data');
 
       // opcional: refrescar inmediatamente para ver cambios de backend
       await _reloadFromBackend();
@@ -156,8 +162,8 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       _snack('❌ No tengo ID válido de solicitud.');
       return;
     }
-    if (!_isActiveStatus()) {
-      _snack('ℹ️ La solicitud no está activa. No se inicia auto-ping.');
+    if (!_canSendLocation()) {
+      _snack('La simulación se habilita después de que un prestador acepta.');
       return;
     }
 
@@ -166,20 +172,18 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       await _sendPingOnce();
     });
 
-    _snack('📍 Auto-ping iniciado (cada 15s)');
+    _snack('Simulación automática iniciada (cada 15s)');
   }
 
   void _stopAutoPing() {
     _pingTimer?.cancel();
     _pingTimer = null;
-    _snack('🛑 Auto-ping detenido');
+    _snack('Simulación automática detenida');
   }
 
   void _snack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   // -----------------------------
@@ -188,7 +192,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   @override
   Widget build(BuildContext context) {
     final id = _requestId();
-    final status = _s(_request['status'], fallback: 'unknown');
+    final status = _s(_request['status'], fallback: 'unknown').toLowerCase();
 
     final locationText = _s(_request['location_text']);
     final start = _s(_request['requested_start_time']);
@@ -196,16 +200,20 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     final createdAt = _s(_request['created_at']);
     final endedAt = _s(_request['ended_at']);
 
-    final preferredGender = _s(_request['preferred_gender'], fallback: 'Sin preferencia');
+    final preferredGender = _s(
+      _request['preferred_gender'],
+      fallback: 'Sin preferencia',
+    );
     final ageMin = _request['preferred_age_min'];
     final ageMax = _request['preferred_age_max'];
     final prefAge = (ageMin == null && ageMax == null)
         ? 'Sin preferencia'
-        : '${_s(ageMin, fallback: '-') } - ${_s(ageMax, fallback: '-') }';
+        : '${_s(ageMin, fallback: '-')} - ${_s(ageMax, fallback: '-')}';
 
     final price = _request['calculated_price']; // por ahora puede ser 0 en MVP
 
     final isActive = _activeStatuses.contains(status);
+    final canSendLocation = const {'matched', 'started'}.contains(status);
 
     return Scaffold(
       appBar: AppBar(
@@ -234,7 +242,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
             const Divider(height: 32),
 
-            const Text('Preferencias', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Preferencias',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             _kv('Género', preferredGender),
             _kv('Edad', prefAge),
@@ -251,9 +262,13 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _sendingPing ? null : _sendPingOnce,
+                    onPressed: (_sendingPing || !canSendLocation)
+                        ? null
+                        : _sendPingOnce,
                     icon: const Icon(Icons.my_location),
-                    label: Text(_sendingPing ? 'Enviando…' : 'Ping manual'),
+                    label: Text(
+                      _sendingPing ? 'Enviando…' : 'Enviar ubicación simulada',
+                    ),
                   ),
                 ),
               ],
@@ -264,15 +279,17 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: (_pingTimer == null && isActive) ? _startAutoPing : null,
-                    child: const Text('Iniciar auto-ping'),
+                    onPressed: (_pingTimer == null && canSendLocation)
+                        ? _startAutoPing
+                        : null,
+                    child: const Text('Iniciar simulación'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton(
                     onPressed: (_pingTimer != null) ? _stopAutoPing : null,
-                    child: const Text('Detener auto-ping'),
+                    child: const Text('Detener simulación'),
                   ),
                 ),
               ],
@@ -321,6 +338,8 @@ class _StatusBadge extends StatelessWidget {
     switch (s) {
       case 'pending':
         return Colors.orange;
+      case 'searching':
+        return Colors.amber;
       case 'matched':
         return Colors.blue;
       case 'started':
@@ -338,10 +357,7 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = status.trim().isEmpty ? 'unknown' : status;
     return Chip(
-      label: Text(
-        s.toUpperCase(),
-        style: const TextStyle(color: Colors.white),
-      ),
+      label: Text(s.toUpperCase(), style: const TextStyle(color: Colors.white)),
       backgroundColor: _color(s),
     );
   }
