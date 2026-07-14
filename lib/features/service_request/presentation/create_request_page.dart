@@ -37,7 +37,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   bool _loadingCategories = false;
 
   LatLng _location = const LatLng(4.6767, -74.0482);
-  LocationPlace? _selectedPlace;
   List<LocationPlace> _locationResults = const [];
   bool _searchingLocation = false;
   String? _locationError;
@@ -115,7 +114,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 
   void _onLocationTextChanged() {
     if (_suppressLocationListener) return;
-    _selectedPlace = null;
     final query = _locationTextCtrl.text.trim();
     _debounce?.cancel();
     if (query.length < 3) {
@@ -161,7 +159,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     _debounce?.cancel();
     _suppressLocationListener = true;
     setState(() {
-      _selectedPlace = place;
       _location = LatLng(place.lat, place.lng);
       _locationTextCtrl.text = place.displayName;
       _locationResults = const [];
@@ -192,7 +189,6 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     _suppressLocationListener = true;
     setState(() {
       _location = result.point;
-      _selectedPlace = null;
       if (name != null && name.isNotEmpty) {
         _locationTextCtrl.text = name;
       }
@@ -288,20 +284,26 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 
   IconData _categoryIcon(CategoryItem category) {
     final value = category.name.toLowerCase();
-    if (value.contains('méd') || value.contains('salud'))
+    if (value.contains('méd') || value.contains('salud')) {
       return Icons.local_hospital_outlined;
-    if (value.contains('compra') || value.contains('merc'))
+    }
+    if (value.contains('compra') || value.contains('merc')) {
       return Icons.shopping_bag_outlined;
-    if (value.contains('trámite') || value.contains('dilig'))
+    }
+    if (value.contains('trámite') || value.contains('dilig')) {
       return Icons.assignment_outlined;
-    if (value.contains('estudio') || value.contains('clase'))
+    }
+    if (value.contains('estudio') || value.contains('clase')) {
       return Icons.menu_book_outlined;
-    if (value.contains('deporte') || value.contains('caminar'))
+    }
+    if (value.contains('deporte') || value.contains('caminar')) {
       return Icons.directions_walk_outlined;
+    }
     if (value.contains('comida') ||
         value.contains('café') ||
-        value.contains('rest'))
+        value.contains('rest')) {
       return Icons.restaurant_outlined;
+    }
     return Icons.people_alt_outlined;
   }
 

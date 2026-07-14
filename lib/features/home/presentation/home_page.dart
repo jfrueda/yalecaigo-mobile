@@ -6,6 +6,7 @@ import '../../../core/utils/service_display.dart';
 import '../../../shared/widgets/service_rating_dialog.dart';
 import '../../auth/data/me_service.dart';
 import '../../auth/presentation/login_page.dart';
+import '../../notifications/presentation/notifications_page.dart';
 import '../../service_request/data/service_lifecycle_service.dart';
 import '../../service_request/data/service_request_query_service.dart';
 import '../../service_request/presentation/create_request_page.dart';
@@ -25,6 +26,7 @@ class _HomePageState extends State<HomePage> {
   final _lifecycleService = ServiceLifecycleService();
 
   Map<String, dynamic>? _activeRequest;
+  Map<String, dynamic>? _pendingRatingRequest;
   Map<String, dynamic>? _me;
   bool _loading = true;
   bool _actionLoading = false;
@@ -68,10 +70,23 @@ class _HomePageState extends State<HomePage> {
     try {
       final me = await _meService.getMe();
       final active = await _queryService.getActiveRequest();
+      Map<String, dynamic>? pendingRating;
+      if (active == null) {
+        final requests = await _queryService.listMyRequests();
+        for (final request in requests) {
+          final isEnded =
+              request['status']?.toString().toLowerCase() == 'ended';
+          if (isEnded && request['my_rating'] == null) {
+            pendingRating = request;
+            break;
+          }
+        }
+      }
       if (!mounted) return;
       setState(() {
         _me = me;
         _activeRequest = active;
+        _pendingRatingRequest = pendingRating;
       });
     } catch (_) {
       if (!mounted) return;
@@ -175,6 +190,17 @@ class _HomePageState extends State<HomePage> {
         title: const Text('YaLeCaigo'),
         actions: [
           IconButton(
+            tooltip: 'Notificaciones',
+            onPressed: () {
+              Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NotificationsPage(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.notifications_none),
+          ),
+          IconButton(
             tooltip: 'Actualizar',
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh),
@@ -215,6 +241,8 @@ class _HomePageState extends State<HomePage> {
                     )
                   else if (_activeRequest != null)
                     _activeCard(_activeRequest!)
+                  else if (_pendingRatingRequest != null)
+                    _pendingRatingCard(_pendingRatingRequest!)
                   else
                     _newRequestCard(),
                   const SizedBox(height: 16),
@@ -233,6 +261,48 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _pendingRatingCard(Map<String, dynamic> request) {
+    return Card(
+      color: Colors.amber.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.star_outline, color: Colors.amber),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Servicio finalizado: falta tu calificación',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(request['category_name']?.toString() ?? 'Acompañamiento'),
+            Text(request['location_text']?.toString() ?? 'Sin ubicación'),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () async {
+                await Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => RequestDetailPage(request: request),
+                  ),
+                );
+                await _load();
+              },
+              icon: const Icon(Icons.star),
+              label: const Text('Calificar ahora'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

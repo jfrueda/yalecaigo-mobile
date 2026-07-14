@@ -71,8 +71,8 @@ class ServiceLifecycleService {
       data: {
         'service_request': requestId,
         'reason': reason.trim(),
-        if (latitude != null) 'latitude': latitude,
-        if (longitude != null) 'longitude': longitude,
+        'latitude': ?latitude,
+        'longitude': ?longitude,
       },
     );
   }

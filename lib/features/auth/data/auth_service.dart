@@ -32,7 +32,12 @@ class AuthService {
     required String username,
     required String password,
     required String role,
-    String email = '',
+    required String email,
+    required String firstName,
+    required String lastName,
+    required String phoneNumber,
+    required String city,
+    required bool termsAccepted,
   }) async {
     final normalizedUsername = username.trim();
     final normalizedRole = role.trim().toLowerCase();
@@ -48,11 +53,39 @@ class AuthService {
       data: {
         'username': normalizedUsername,
         'email': email.trim(),
+        'phone_number': phoneNumber.trim(),
         'password': password,
         'role': normalizedRole,
+        'first_name': firstName.trim(),
+        'last_name': lastName.trim(),
+        'city': city.trim(),
+        'terms_accepted': termsAccepted,
       },
     );
 
     await login(normalizedUsername, password);
+  }
+
+  Future<Map<String, dynamic>> requestPasswordReset(String identifier) async {
+    final response = await PublicApiClient.dio.post<Map<String, dynamic>>(
+      Endpoints.passwordResetRequest,
+      data: {'identifier': identifier.trim()},
+    );
+    return Map<String, dynamic>.from(response.data ?? const {});
+  }
+
+  Future<void> confirmPasswordReset({
+    required String uid,
+    required String token,
+    required String newPassword,
+  }) async {
+    await PublicApiClient.dio.post<dynamic>(
+      Endpoints.passwordResetConfirm,
+      data: {
+        'uid': uid.trim(),
+        'token': token.trim(),
+        'new_password': newPassword,
+      },
+    );
   }
 }

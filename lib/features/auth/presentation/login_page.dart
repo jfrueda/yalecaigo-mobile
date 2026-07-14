@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/navigation/role_gate_page.dart';
 import '../data/auth_service.dart';
+import 'forgot_password_page.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -149,6 +150,18 @@ class _LoginPageState extends State<LoginPage> {
                               )
                             : const Text('Entrar'),
                       ),
+                    ),
+                    TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const ForgotPasswordPage(),
+                                ),
+                              );
+                            },
+                      child: const Text('Olvidé mi contraseña'),
                     ),
                     TextButton(
                       onPressed: _loading

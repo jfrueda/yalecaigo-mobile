@@ -5,6 +5,7 @@ import '../../../core/network/token_storage.dart';
 import '../../../core/utils/service_display.dart';
 import '../../../shared/widgets/service_rating_dialog.dart';
 import '../../auth/presentation/login_page.dart';
+import '../../notifications/presentation/notifications_page.dart';
 import '../../service_request/data/service_lifecycle_service.dart';
 import '../../service_request/data/service_request_query_service.dart';
 import 'provider_active_service_page.dart';
@@ -169,6 +170,17 @@ class _AvailableRequestsPageState extends State<AvailableRequestsPage> {
       appBar: AppBar(
         title: const Text('Panel del prestador'),
         actions: [
+          IconButton(
+            tooltip: 'Notificaciones',
+            onPressed: () {
+              Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NotificationsPage(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.notifications_none),
+          ),
           IconButton(
             tooltip: 'Histórico',
             onPressed: () async {
