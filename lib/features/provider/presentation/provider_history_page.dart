@@ -1,11 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/service_display.dart';
+import '../../../shared/widgets/app_components.dart';
 import '../../service_request/data/service_request_query_service.dart';
 import 'provider_active_service_page.dart';
 
 class ProviderHistoryPage extends StatefulWidget {
-  const ProviderHistoryPage({super.key});
+  const ProviderHistoryPage({
+    super.key,
+    this.embedded = false,
+    this.initialItems,
+    this.onChanged,
+  });
+
+  final bool embedded;
+  final List<Map<String, dynamic>>? initialItems;
+  final Future<void> Function()? onChanged;
 
   @override
   State<ProviderHistoryPage> createState() => _ProviderHistoryPageState();
@@ -14,207 +26,222 @@ class ProviderHistoryPage extends StatefulWidget {
 class _ProviderHistoryPageState extends State<ProviderHistoryPage> {
   final _queryService = ServiceRequestQueryService();
   late Future<List<Map<String, dynamic>>> _future;
+  String _filter = 'all';
 
   @override
   void initState() {
     super.initState();
-    _future = _queryService.listProviderHistory();
+    _future = widget.initialItems == null
+        ? _queryService.listProviderHistory()
+        : Future.value(widget.initialItems);
+  }
+
+  @override
+  void didUpdateWidget(covariant ProviderHistoryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialItems != oldWidget.initialItems &&
+        widget.initialItems != null) {
+      _future = Future.value(widget.initialItems);
+    }
   }
 
   Future<void> _refresh() async {
     setState(() => _future = _queryService.listProviderHistory());
     await _future;
+    await widget.onChanged?.call();
   }
 
-  double _toDouble(dynamic value) =>
+  double _money(dynamic value) =>
       double.tryParse(value?.toString() ?? '0') ?? 0;
+
+  List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> items) {
+    if (_filter == 'pending') {
+      return items.where((item) {
+        final payment = item['payment'] is Map
+            ? Map<String, dynamic>.from(item['payment'] as Map)
+            : <String, dynamic>{};
+        return payment['status']?.toString().toLowerCase() == 'release_pending';
+      }).toList();
+    }
+    if (_filter == 'paid') {
+      return items.where((item) {
+        final payment = item['payment'] is Map
+            ? Map<String, dynamic>.from(item['payment'] as Map)
+            : <String, dynamic>{};
+        return payment['status']?.toString().toLowerCase() ==
+            'paid_to_provider';
+      }).toList();
+    }
+    return items;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Mis servicios')),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: FutureBuilder<List<Map<String, dynamic>>>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return ListView(
-                children: [
-                  const SizedBox(height: 180),
-                  Center(
-                    child: Text('No fue posible cargar: ${snapshot.error}'),
-                  ),
-                ],
-              );
-            }
-            final requests = snapshot.data ?? const [];
-            if (requests.isEmpty) {
-              return ListView(
-                children: const [
-                  SizedBox(height: 180),
-                  Center(child: Text('Todavía no tienes servicios asignados.')),
-                ],
-              );
-            }
-
-            final finished = requests
-                .where(
-                  (item) => item['status']?.toString().toLowerCase() == 'ended',
-                )
-                .toList();
-            final transferPending = requests.where((item) {
-              final payment = item['payment'] is Map
-                  ? Map<String, dynamic>.from(item['payment'] as Map)
-                  : <String, dynamic>{};
-              return payment['status']?.toString().toLowerCase() ==
-                  'release_pending';
-            }).toList();
-            final transferred = requests.where((item) {
-              final payment = item['payment'] is Map
-                  ? Map<String, dynamic>.from(item['payment'] as Map)
-                  : <String, dynamic>{};
-              return payment['status']?.toString().toLowerCase() ==
-                  'paid_to_provider';
-            }).toList();
-            final gross = requests.fold<double>(0, (sum, item) {
-              final payment = item['payment'] is Map
-                  ? Map<String, dynamic>.from(item['payment'] as Map)
-                  : <String, dynamic>{};
-              return sum + _toDouble(payment['amount_total']);
-            });
-            final net = requests.fold<double>(0, (sum, item) {
-              final payment = item['payment'] is Map
-                  ? Map<String, dynamic>.from(item['payment'] as Map)
-                  : <String, dynamic>{};
-              return sum + _toDouble(payment['provider_amount']);
-            });
-            final transferredValue = transferred.fold<double>(0, (sum, item) {
-              final payment = item['payment'] is Map
-                  ? Map<String, dynamic>.from(item['payment'] as Map)
-                  : <String, dynamic>{};
-              return sum + _toDouble(payment['provider_amount']);
-            });
-
+    final body = RefreshIndicator(
+      onRefresh: _refresh,
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
             return ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                const _SectionTitle('Dashboard del prestador'),
-                _DashboardGrid(
-                  children: [
-                    _MetricCard(
-                      icon: Icons.task_alt_outlined,
-                      title: 'Servicios',
-                      value: requests.length.toString(),
-                      subtitle: 'Total aprobados/asignados',
-                    ),
-                    _MetricCard(
-                      icon: Icons.verified_outlined,
-                      title: 'Finalizados',
-                      value: finished.length.toString(),
-                      subtitle: 'Servicios completados',
-                    ),
-                    _MetricCard(
-                      icon: Icons.account_balance_wallet_outlined,
-                      title: 'Cuenta esperada',
-                      value: formatCop(net),
-                      subtitle: 'Valor neto acumulado',
-                    ),
-                    _MetricCard(
-                      icon: Icons.paid_outlined,
-                      title: 'Transferido',
-                      value: formatCop(transferredValue),
-                      subtitle:
-                          '${transferred.length} transferencias completas',
-                    ),
-                  ],
+              children: const [
+                SizedBox(height: 120),
+                AppEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'No pudimos cargar tus ganancias',
+                  message: 'Desliza hacia abajo para intentar nuevamente.',
                 ),
-                const SizedBox(height: 10),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Estado de cuenta',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 10),
-                        _accountRow('Valor bruto gestionado', formatCop(gross)),
-                        _accountRow('Valor neto acumulado', formatCop(net)),
-                        _accountRow(
-                          'Pendiente por transferir',
-                          '${transferPending.length} servicio(s)',
-                        ),
-                        _accountRow(
-                          'Transferencias realizadas',
-                          '${transferred.length} servicio(s)',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const _SectionTitle('Histórico detallado'),
-                ...requests.map(_card),
               ],
             );
-          },
-        ),
+          }
+
+          final allItems = snapshot.data ?? const [];
+          final items = _filtered(allItems);
+          final transferred = allItems.where((item) {
+            final payment = item['payment'] is Map
+                ? Map<String, dynamic>.from(item['payment'] as Map)
+                : <String, dynamic>{};
+            return payment['status']?.toString().toLowerCase() ==
+                'paid_to_provider';
+          }).toList();
+          final pending = allItems.where((item) {
+            final payment = item['payment'] is Map
+                ? Map<String, dynamic>.from(item['payment'] as Map)
+                : <String, dynamic>{};
+            return payment['status']?.toString().toLowerCase() ==
+                'release_pending';
+          }).toList();
+          final transferredValue = transferred.fold<double>(0, (sum, item) {
+            final payment = item['payment'] is Map
+                ? Map<String, dynamic>.from(item['payment'] as Map)
+                : <String, dynamic>{};
+            return sum + _money(payment['provider_amount']);
+          });
+          final pendingValue = pending.fold<double>(0, (sum, item) {
+            final payment = item['payment'] is Map
+                ? Map<String, dynamic>.from(item['payment'] as Map)
+                : <String, dynamic>{};
+            return sum + _money(payment['provider_amount']);
+          });
+
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.page,
+              AppSpacing.sm,
+              AppSpacing.page,
+              AppSpacing.xl,
+            ),
+            children: [
+              const AppSectionHeader(
+                title: 'Estado de cuenta',
+                subtitle: 'Consulta tus valores pendientes y transferidos.',
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppMetricCard(
+                      label: 'Disponible',
+                      value: formatCop(transferredValue),
+                      caption: '${transferred.length} transferencias',
+                      icon: Icons.account_balance_wallet_outlined,
+                      accent: AppColors.success,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: AppMetricCard(
+                      label: 'Pendiente',
+                      value: formatCop(pendingValue),
+                      caption: '${pending.length} actividades',
+                      icon: Icons.schedule_send_outlined,
+                      accent: AppColors.warning,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AppSurfaceCard(
+                backgroundColor: AppColors.tint(AppColors.primary, 0.06),
+                borderColor: AppColors.tint(AppColors.primary, 0.22),
+                child: AppInfoRow(
+                  icon: Icons.paid_outlined,
+                  label: 'Transferido en el período',
+                  value: formatCop(transferredValue),
+                  valueColor: AppColors.success,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _filterChip('all', 'Todos'),
+                    _filterChip('pending', 'Pendientes'),
+                    _filterChip('paid', 'Transferidos'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              if (items.isEmpty)
+                const AppEmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Sin movimientos en este filtro',
+                  message:
+                      'Los valores aparecerán cuando finalices actividades.',
+                )
+              else
+                ...items.map(_movementCard),
+            ],
+          );
+        },
       ),
     );
-  }
 
-  Widget _accountRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(child: Text(label)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+    if (widget.embedded) {
+      return body;
+    }
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Ganancias'),
+        actions: [
+          IconButton(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
         ],
       ),
+      body: body,
     );
   }
 
-  Widget _card(Map<String, dynamic> request) {
+  Widget _filterChip(String value, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpacing.sm),
+      child: AppChoiceChip(
+        label: label,
+        selected: _filter == value,
+        onSelected: (_) => setState(() => _filter = value),
+      ),
+    );
+  }
+
+  Widget _movementCard(Map<String, dynamic> request) {
     final payment = request['payment'] is Map
         ? Map<String, dynamic>.from(request['payment'] as Map)
         : <String, dynamic>{};
-    final transferDone =
+    final paid =
         payment['status']?.toString().toLowerCase() == 'paid_to_provider';
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: serviceStatusColor(request['status']),
-          child: const Icon(Icons.work_outline, color: Colors.white),
-        ),
-        title: Text(request['category_name']?.toString() ?? 'Acompañamiento'),
-        subtitle: Text(
-          '${serviceStatusLabel(request['status'])}\n'
-          '${formatDateTime(request['requested_start_time'])}\n'
-          'Ganancia: ${formatCop(payment['provider_amount'])}\n'
-          'Pago: ${paymentStatusLabel(payment['status'])}',
-        ),
-        isThreeLine: true,
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (transferDone)
-              const Icon(Icons.check_circle, color: Colors.green)
-            else
-              const Icon(Icons.schedule, color: Colors.orange),
-            const SizedBox(height: 4),
-            Text(
-              transferDone ? 'Transferido' : 'Pendiente',
-              style: const TextStyle(fontSize: 11),
-            ),
-          ],
-        ),
+    final statusColor = paymentStatusColor(payment['status']);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: AppSurfaceCard(
+        padding: const EdgeInsets.all(AppSpacing.md),
         onTap: () async {
           await Navigator.of(context).push<void>(
             MaterialPageRoute<void>(
@@ -224,81 +251,68 @@ class _ProviderHistoryPageState extends State<ProviderHistoryPage> {
           );
           await _refresh();
         },
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-}
-
-class _DashboardGrid extends StatelessWidget {
-  const _DashboardGrid({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: children
-          .map(
-            (child) => SizedBox(
-              width: (MediaQuery.of(context).size.width - 34) / 2,
-              child: child,
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final String title;
-  final String value;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon),
-            const SizedBox(height: 10),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.tint(statusColor, 0.12),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(
+                    paid
+                        ? Icons.check_circle_outline
+                        : Icons.schedule_send_outlined,
+                    color: statusColor,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        request['category_name']?.toString() ??
+                            'Acompañamiento',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        formatShortDateTime(request['requested_start_time']),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  formatCop(payment['provider_amount']),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(color: AppColors.success),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(subtitle, style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                AppStatusPill(
+                  label: paymentStatusLabel(payment['status']),
+                  color: statusColor,
+                  icon: paid
+                      ? Icons.verified_outlined
+                      : Icons.schedule_outlined,
+                ),
+                const Spacer(),
+                Text(
+                  'Ref. ${payment['external_reference'] ?? 'YLC-DEMO'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
           ],
         ),
       ),

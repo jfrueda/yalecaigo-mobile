@@ -5,7 +5,10 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/endpoints.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/service_display.dart';
+import '../../../shared/widgets/app_components.dart';
 
 class ProviderRequestDetailPage extends StatefulWidget {
   const ProviderRequestDetailPage({super.key, required this.request});
@@ -30,18 +33,24 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
 
   int? get _id {
     final value = _request['id'];
-    if (value is int) return value;
+    if (value is int) {
+      return value;
+    }
     return int.tryParse(value?.toString() ?? '');
   }
 
   double _double(dynamic value, double fallback) {
-    if (value is num) return value.toDouble();
+    if (value is num) {
+      return value.toDouble();
+    }
     return double.tryParse(value?.toString() ?? '') ?? fallback;
   }
 
   Future<void> _accept() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     setState(() {
       _loading = true;
       _message = null;
@@ -50,21 +59,28 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
       final response = await ApiClient.dio.post(
         Endpoints.acceptRequest(requestId),
       );
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(
         () => _request = Map<String, dynamic>.from(response.data as Map),
       );
       Navigator.of(context).pop(true);
     } on DioException catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final data = error.response?.data;
       setState(() {
         _message = data is Map
-            ? data['detail']?.toString() ?? 'No fue posible aceptar.'
-            : 'No fue posible aceptar.';
+            ? data['detail']?.toString() ??
+                  'No fue posible aceptar la actividad.'
+            : 'No fue posible aceptar la actividad.';
       });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -77,26 +93,72 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
     final payment = _request['payment'] is Map
         ? Map<String, dynamic>.from(_request['payment'] as Map)
         : <String, dynamic>{};
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Detalle de solicitud')),
+      appBar: AppBar(title: const Text('Revisar actividad')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.page,
+          AppSpacing.sm,
+          AppSpacing.page,
+          120,
+        ),
         children: [
+          AppStatusPill(
+            label: 'Solicitud disponible',
+            color: AppColors.primaryMedium,
+            icon: Icons.work_outline,
+          ),
+          const SizedBox(height: AppSpacing.md),
           Text(
             _request['category_name']?.toString() ?? 'Acompañamiento',
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.headlineSmall,
           ),
-          const SizedBox(height: 8),
-          Text(_request['location_text']?.toString() ?? 'Sin ubicación'),
-          Text('Inicio: ${formatDateTime(_request['requested_start_time'])}'),
+          const SizedBox(height: AppSpacing.xs),
           Text(
-            'Duración: ${_request['requested_duration_minutes'] ?? '—'} min',
+            'Revisa los detalles antes de aceptar.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.lg),
+          AppSurfaceCard(
+            child: Column(
+              children: [
+                AppInfoRow(
+                  icon: Icons.place_outlined,
+                  label: 'Punto de encuentro',
+                  value:
+                      _request['location_text']?.toString() ?? 'Sin ubicación',
+                ),
+                const Divider(),
+                AppInfoRow(
+                  icon: Icons.event_available_outlined,
+                  label: 'Inicio',
+                  value: formatDateTime(_request['requested_start_time']),
+                ),
+                const Divider(),
+                AppInfoRow(
+                  icon: Icons.timer_outlined,
+                  label: 'Duración',
+                  value:
+                      '${_request['requested_duration_minutes'] ?? '—'} minutos',
+                ),
+                const Divider(),
+                AppInfoRow(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: 'Ganancia estimada',
+                  value: formatCop(payment['provider_amount']),
+                  valueColor: AppColors.success,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
           SizedBox(
-            height: 210,
+            height: 220,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
               child: FlutterMap(
                 options: MapOptions(initialCenter: point, initialZoom: 15),
                 children: [
@@ -109,12 +171,24 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
                     markers: [
                       Marker(
                         point: point,
-                        width: 44,
-                        height: 44,
-                        child: const Icon(
-                          Icons.location_pin,
-                          size: 44,
-                          color: Colors.red,
+                        width: 48,
+                        height: 48,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0x33173F4D),
+                                blurRadius: 12,
+                                offset: Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.place_rounded,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ],
@@ -123,50 +197,106 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Pago y ganancia',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text('Pago: ${paymentStatusLabel(payment['status'])}'),
-                  Text('Valor total: ${formatCop(payment['amount_total'])}'),
-                  Text('Comisión: ${formatCop(payment['platform_fee'])}'),
-                  Text(
-                    'Recibirías: ${formatCop(payment['provider_amount'])}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
+          const SizedBox(height: AppSpacing.md),
+          AppSurfaceCard(
+            backgroundColor: AppColors.tint(AppColors.primary, 0.06),
+            borderColor: AppColors.tint(AppColors.primary, 0.22),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Condiciones de la actividad',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                SizedBox(height: AppSpacing.md),
+                _SafetyLine(
+                  icon: Icons.store_mall_directory_outlined,
+                  text: 'Punto público validado',
+                ),
+                _SafetyLine(
+                  icon: Icons.lock_outline_rounded,
+                  text: 'Pago protegido',
+                ),
+                _SafetyLine(
+                  icon: Icons.verified_user_outlined,
+                  text: 'Solicitante identificado',
+                ),
+              ],
             ),
           ),
-          if ((_request['notes']?.toString().trim() ?? '').isNotEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text('Notas: ${_request['notes']}'),
+          if ((_request['notes']?.toString().trim() ?? '').isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            AppSurfaceCard(
+              child: AppInfoRow(
+                icon: Icons.notes_outlined,
+                label: 'Indicación del solicitante',
+                value: _request['notes'].toString(),
               ),
             ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: _loading ? null : _accept,
-            icon: const Icon(Icons.check),
-            label: Text(_loading ? 'Aceptando…' : 'Aceptar solicitud'),
+          ],
+          if (_message != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              _message!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.danger,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.page,
+            AppSpacing.md,
+            AppSpacing.page,
+            AppSpacing.md,
           ),
-          if (_message != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                _message!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(top: BorderSide(color: AppColors.border)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilledButton.icon(
+                onPressed: _loading ? null : _accept,
+                icon: const Icon(Icons.check_circle_outline),
+                label: Text(_loading ? 'Aceptando…' : 'Aceptar actividad'),
               ),
-            ),
+              TextButton(
+                onPressed: _loading
+                    ? null
+                    : () => Navigator.of(context).pop(false),
+                child: const Text('No me interesa'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SafetyLine extends StatelessWidget {
+  const _SafetyLine({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        children: [
+          Icon(icon, size: 19, color: AppColors.success),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(child: Text(text)),
         ],
       ),
     );

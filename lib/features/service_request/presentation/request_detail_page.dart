@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/service_display.dart';
 import '../../../shared/widgets/service_rating_dialog.dart';
 import '../data/location_ping_service.dart';
@@ -48,7 +50,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   int? get _id {
     final value = _request['id'];
-    if (value is int) return value;
+    if (value is int) {
+      return value;
+    }
     return int.tryParse(value?.toString() ?? '');
   }
 
@@ -60,7 +64,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   }
 
   double _double(dynamic value, double fallback) {
-    if (value is num) return value.toDouble();
+    if (value is num) {
+      return value.toDouble();
+    }
     return double.tryParse(value?.toString() ?? '') ?? fallback;
   }
 
@@ -68,14 +74,22 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   Future<void> _reload({bool silent = false}) async {
     final requestId = _id;
-    if (requestId == null) return;
-    if (!silent) setState(() => _refreshing = true);
+    if (requestId == null) {
+      return;
+    }
+    if (!silent) {
+      setState(() => _refreshing = true);
+    }
     try {
       final fresh = await _queryService.getRequestById(requestId);
-      if (!mounted || fresh == null) return;
+      if (!mounted || fresh == null) {
+        return;
+      }
       setState(() => _request = fresh);
     } finally {
-      if (mounted && !silent) setState(() => _refreshing = false);
+      if (mounted && !silent) {
+        setState(() => _refreshing = false);
+      }
     }
   }
 
@@ -85,12 +99,16 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     setState(() => _loading = true);
     try {
       final updated = await action();
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _request = updated);
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -98,13 +116,17 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     final data = error.response?.data;
     if (data is Map) {
       final detail = data['detail'] ?? data['code'] ?? data.values.firstOrNull;
-      if (detail != null) return detail.toString();
+      if (detail != null) {
+        return detail.toString();
+      }
     }
     return error.message ?? 'No fue posible completar la operación.';
   }
 
   void _showMessage(String message) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
@@ -112,7 +134,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   Future<void> _simulatePayment() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     setState(() => _loading = true);
     try {
       await _paymentService.simulateApproval(requestId);
@@ -121,13 +145,17 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _sendDemoLocation({required bool meetingPoint}) async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final baseLat = _double(_request['location_lat'], 4.6767);
     final baseLng = _double(_request['location_lng'], -74.0482);
     final latitude = meetingPoint ? baseLat : baseLat + 0.012;
@@ -150,13 +178,17 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _confirmArrival() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final baseLat = _double(_request['location_lat'], 4.6767);
     final baseLng = _double(_request['location_lng'], -74.0482);
 
@@ -169,7 +201,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         source: 'arrival_confirmation',
       );
       final updated = await _lifecycleService.arrive(requestId);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _request = updated);
       _showMessage(
         'Llegada confirmada. La ubicación se actualizó automáticamente.',
@@ -177,18 +211,24 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _cancel() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final result = await showDialog<_CancellationData>(
       context: context,
       builder: (_) => const _CancellationDialog(isProvider: false),
     );
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
     await _runAction(
       () => _lifecycleService.cancel(
         requestId: requestId,
@@ -200,12 +240,16 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   Future<void> _reportRisk() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final result = await showDialog<_RiskReportData>(
       context: context,
       builder: (_) => const _RiskReportDialog(isProvider: false),
     );
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
     try {
       await _lifecycleService.reportRisk(
         requestId: requestId,
@@ -224,18 +268,24 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   Future<void> _finishAndRate() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
 
     final rating = await showRequiredServiceRatingDialog(
       context,
-      targetLabel: 'el prestador',
+      targetLabel: 'el acompañante',
     );
-    if (rating == null || !mounted) return;
+    if (rating == null || !mounted) {
+      return;
+    }
 
     setState(() => _loading = true);
     try {
       final updated = await _lifecycleService.finish(requestId);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _request = updated);
 
       try {
@@ -254,25 +304,31 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       final status = _request['status']?.toString().toLowerCase();
       _showMessage(
         status == 'ended'
-            ? 'Servicio finalizado y calificación registrada.'
+            ? 'Actividad finalizada y calificación registrada.'
             : 'Finalización y calificación registradas. Falta la confirmación del prestador.',
       );
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _rate() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final result = await showRequiredServiceRatingDialog(
       context,
-      targetLabel: 'el prestador',
+      targetLabel: 'el acompañante',
       includeFinishMessage: false,
     );
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
     try {
       await _lifecycleService.rate(
         requestId: requestId,
@@ -297,12 +353,16 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   Future<void> _notifyLateArrival() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final result = await showDialog<_LateArrivalData>(
       context: context,
       builder: (_) => const _LateArrivalDialog(),
     );
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
     await _runAction(
       () => _lifecycleService.notifyLateArrival(
         requestId: requestId,
@@ -338,7 +398,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
           _statusCard(),
           if (lateNotice != null) ...[
@@ -380,7 +440,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     return Card(
       color: serviceStatusColor(_status).withValues(alpha: 0.12),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           children: [
             Icon(
@@ -416,12 +476,12 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   Widget _serviceCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Detalle del servicio',
+              'Detalle de la actividad',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
@@ -446,7 +506,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         _status == 'pending_payment' && paymentStatus == 'pending';
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -479,7 +539,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
                   Icons.schedule_send_outlined,
-                  color: Colors.orange,
+                  color: AppColors.warning,
                 ),
                 title: Text('Transferencia pendiente'),
                 subtitle: Text(
@@ -491,7 +551,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               const SizedBox(height: 8),
               const ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.check_circle, color: Colors.green),
+                leading: Icon(Icons.check_circle, color: AppColors.success),
                 title: Text('Transferencia realizada'),
                 subtitle: Text(
                   'La plataforma registró que el valor fue transferido a la cuenta del prestador.',
@@ -507,7 +567,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   Widget _proximityCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -550,11 +610,11 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     final eta = metadata['eta_minutes'];
     final actor = event['actor_username']?.toString() ?? 'La otra persona';
     return Card(
-      color: Colors.orange.shade50,
+      color: AppColors.tint(AppColors.warning, 0.08),
       child: ListTile(
         leading: const Icon(
           Icons.access_time_filled_outlined,
-          color: Colors.orange,
+          color: AppColors.warning,
         ),
         title: Text('$actor informó que llegará tarde'),
         subtitle: Text(
@@ -569,12 +629,12 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   Widget _startCodeHeroCard() {
     final startCode = _request['start_code_for_client']?.toString() ?? '';
     return Card(
-      color: Colors.blue.shade50,
+      color: AppColors.tint(AppColors.primary, 0.07),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           children: [
-            const Icon(Icons.pin_outlined, size: 34, color: Colors.blue),
+            const Icon(Icons.pin_outlined, size: 34, color: AppColors.primary),
             const SizedBox(height: 6),
             const Text(
               'Ambos están en el punto',
@@ -601,7 +661,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     final canFinish = _bool(_request['can_finish']);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -634,7 +694,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               const SizedBox(height: 8),
               const ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.check_circle, color: Colors.green),
+                leading: Icon(Icons.check_circle, color: AppColors.success),
                 title: Text('Tu llegada ya está confirmada'),
                 subtitle: Text(
                   'El código aparecerá arriba cuando el prestador también llegue.',
@@ -670,7 +730,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     final rating = _request['my_rating'];
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: rating is Map
             ? Text(
                 'Tu calificación: ${rating['score']}/5\n${rating['comment'] ?? ''}',
@@ -697,10 +757,12 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   Widget _actionsCard() {
     final canCancel = _bool(_request['can_cancel']);
     final riskEnabled = const {'matched', 'started', 'ended'}.contains(_status);
-    if (!canCancel && !riskEnabled) return const SizedBox.shrink();
+    if (!canCancel && !riskEnabled) {
+      return const SizedBox.shrink();
+    }
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -717,13 +779,13 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               OutlinedButton.icon(
                 onPressed: _loading ? null : _cancel,
                 icon: const Icon(Icons.cancel_outlined),
-                label: const Text('Cancelar servicio'),
+                label: const Text('Cancelar actividad'),
               ),
             if (riskEnabled)
               TextButton.icon(
                 onPressed: _loading ? null : _reportRisk,
-                icon: const Icon(Icons.warning_amber, color: Colors.red),
-                label: const Text('Reportar un caso de riesgo'),
+                icon: const Icon(Icons.warning_amber, color: AppColors.danger),
+                label: const Text('Reportar una situación'),
               ),
           ],
         ),
@@ -734,7 +796,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   Widget _timelineCard(List<Map<String, dynamic>> timeline) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -777,27 +839,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         ],
       ),
     );
-  }
-}
-
-IconData serviceStatusIcon(String status) {
-  switch (status) {
-    case 'pending_payment':
-      return Icons.payment;
-    case 'searching':
-      return Icons.search;
-    case 'matched':
-      return Icons.people;
-    case 'started':
-      return Icons.play_circle;
-    case 'ended':
-      return Icons.check_circle;
-    case 'cancelled':
-      return Icons.cancel;
-    case 'incident':
-      return Icons.warning;
-    default:
-      return Icons.info;
   }
 }
 
@@ -847,7 +888,9 @@ class _LateArrivalDialogState extends State<_LateArrivalDialog> {
                 )
                 .toList(),
             onChanged: (value) {
-              if (value != null) setState(() => _eta = value);
+              if (value != null) {
+                setState(() => _eta = value);
+              }
             },
           ),
           const SizedBox(height: 12),
@@ -925,7 +968,7 @@ class _RiskReportDialogState extends State<_RiskReportDialog> {
             'otro': 'Otro',
           };
     return AlertDialog(
-      title: const Text('Reportar un caso de riesgo'),
+      title: const Text('Reportar una situación'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -939,7 +982,9 @@ class _RiskReportDialogState extends State<_RiskReportDialog> {
                 DropdownMenuItem(value: 'alta', child: Text('Alta')),
               ],
               onChanged: (value) {
-                if (value != null) setState(() => _level = value);
+                if (value != null) {
+                  setState(() => _level = value);
+                }
               },
             ),
             const SizedBox(height: 12),
@@ -955,7 +1000,9 @@ class _RiskReportDialogState extends State<_RiskReportDialog> {
                   )
                   .toList(),
               onChanged: (value) {
-                if (value != null) setState(() => _reason = value);
+                if (value != null) {
+                  setState(() => _reason = value);
+                }
               },
             ),
             const SizedBox(height: 12),
@@ -1036,10 +1083,12 @@ class _CancellationDialogState extends State<_CancellationDialog> {
             'activity_changed': 'La actividad cambió',
             'other': 'Otro',
           };
-    if (!options.containsKey(_code)) _code = options.keys.first;
+    if (!options.containsKey(_code)) {
+      _code = options.keys.first;
+    }
 
     return AlertDialog(
-      title: const Text('Cancelar servicio'),
+      title: const Text('Cancelar actividad'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1056,7 +1105,9 @@ class _CancellationDialogState extends State<_CancellationDialog> {
                   )
                   .toList(),
               onChanged: (value) {
-                if (value != null) setState(() => _code = value);
+                if (value != null) {
+                  setState(() => _code = value);
+                }
               },
             ),
             const SizedBox(height: 12),

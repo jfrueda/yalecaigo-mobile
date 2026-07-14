@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/service_display.dart';
+import '../../../shared/widgets/app_components.dart';
 import '../data/notification_service.dart';
 
 class NotificationsPage extends StatefulWidget {
@@ -42,8 +45,26 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Icons.flag_outlined;
       case 'payment_released':
         return Icons.paid_outlined;
+      case 'incident_reported':
+        return Icons.report_gmailerrorred_outlined;
       default:
-        return Icons.notifications_none;
+        return Icons.notifications_none_rounded;
+    }
+  }
+
+  Color _colorFor(Map<String, dynamic> notification) {
+    final payload = notification['payload'];
+    final event = payload is Map ? payload['event']?.toString() : null;
+    switch (event) {
+      case 'payment_released':
+      case 'service_finished':
+        return AppColors.success;
+      case 'late_notice':
+        return AppColors.warning;
+      case 'incident_reported':
+        return AppColors.danger;
+      default:
+        return AppColors.primaryMedium;
     }
   }
 
@@ -53,7 +74,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
       appBar: AppBar(
         title: const Text('Notificaciones'),
         actions: [
-          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -66,10 +90,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
             }
             if (snapshot.hasError) {
               return ListView(
-                children: [
-                  const SizedBox(height: 180),
-                  Center(
-                    child: Text('No fue posible cargar: ${snapshot.error}'),
+                children: const [
+                  SizedBox(height: 140),
+                  AppEmptyState(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'No pudimos cargar las notificaciones',
+                    message: 'Desliza hacia abajo para intentar nuevamente.',
                   ),
                 ],
               );
@@ -78,34 +104,63 @@ class _NotificationsPageState extends State<NotificationsPage> {
             if (items.isEmpty) {
               return ListView(
                 children: const [
-                  SizedBox(height: 160),
-                  Icon(
-                    Icons.notifications_off_outlined,
-                    size: 64,
-                    color: Colors.grey,
+                  SizedBox(height: 120),
+                  AppEmptyState(
+                    icon: Icons.notifications_none_rounded,
+                    title: 'Todo al día',
+                    message:
+                        'Aquí aparecerán los cambios importantes de tus actividades.',
                   ),
-                  SizedBox(height: 12),
-                  Center(child: Text('Aún no tienes notificaciones.')),
                 ],
               );
             }
             return ListView.separated(
-              padding: const EdgeInsets.all(12),
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.page,
+                AppSpacing.sm,
+                AppSpacing.page,
+                AppSpacing.xl,
+              ),
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 6),
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
               itemBuilder: (context, index) {
                 final item = items[index];
-                return Card(
-                  child: ListTile(
-                    leading: CircleAvatar(child: Icon(_iconFor(item))),
-                    title: Text(
-                      item['title']?.toString() ?? 'Notificación',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      '${item['body'] ?? ''}\n${formatDateTime(item['created_at'])}',
-                    ),
-                    isThreeLine: true,
+                final color = _colorFor(item);
+                return AppSurfaceCard(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: AppColors.tint(color, 0.13),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(_iconFor(item), color: color),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item['title']?.toString() ?? 'Notificación',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(item['body']?.toString() ?? ''),
+                            const SizedBox(height: AppSpacing.sm),
+                            Text(
+                              formatDateTime(item['created_at']),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 );
               },

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
+
 String serviceStatusLabel(dynamic value) {
   switch (value?.toString().toLowerCase()) {
     case 'pending_payment':
@@ -11,15 +13,15 @@ String serviceStatusLabel(dynamic value) {
     case 'matched':
       return 'Pendiente de encuentro';
     case 'started':
-      return 'Servicio en curso';
+      return 'Actividad en curso';
     case 'ended':
-      return 'Servicio finalizado';
+      return 'Actividad finalizada';
     case 'cancelled':
-      return 'Servicio cancelado';
+      return 'Actividad cancelada';
     case 'expired':
       return 'Solicitud vencida';
     case 'incident':
-      return 'Servicio en revisión';
+      return 'En revisión';
     default:
       return value?.toString() ?? 'Sin estado';
   }
@@ -28,23 +30,47 @@ String serviceStatusLabel(dynamic value) {
 Color serviceStatusColor(dynamic value) {
   switch (value?.toString().toLowerCase()) {
     case 'pending_payment':
-      return Colors.deepOrange;
+      return AppColors.warning;
     case 'pending':
     case 'searching':
-      return Colors.amber.shade800;
+      return AppColors.information;
     case 'matched':
-      return Colors.blue;
+      return AppColors.primaryMedium;
     case 'started':
-      return Colors.green;
+      return AppColors.success;
     case 'ended':
-      return Colors.teal;
+      return AppColors.secondary;
     case 'cancelled':
     case 'expired':
-      return Colors.grey;
+      return AppColors.textSecondary;
     case 'incident':
-      return Colors.red;
+      return AppColors.danger;
     default:
-      return Colors.blueGrey;
+      return AppColors.information;
+  }
+}
+
+IconData serviceStatusIcon(dynamic value) {
+  switch (value?.toString().toLowerCase()) {
+    case 'pending_payment':
+      return Icons.lock_clock_outlined;
+    case 'pending':
+    case 'searching':
+      return Icons.search_rounded;
+    case 'matched':
+      return Icons.person_pin_circle_outlined;
+    case 'started':
+      return Icons.play_circle_outline_rounded;
+    case 'ended':
+      return Icons.check_circle_outline_rounded;
+    case 'cancelled':
+      return Icons.cancel_outlined;
+    case 'expired':
+      return Icons.event_busy_outlined;
+    case 'incident':
+      return Icons.report_gmailerrorred_outlined;
+    default:
+      return Icons.info_outline_rounded;
   }
 }
 
@@ -55,11 +81,11 @@ String paymentStatusLabel(dynamic value) {
     case 'approved':
       return 'Aprobado';
     case 'held':
-      return 'Pago reservado';
+      return 'Pago protegido';
     case 'release_pending':
-      return 'Pendiente de transferir';
+      return 'Transferencia pendiente';
     case 'paid_to_provider':
-      return 'Pagado al prestador';
+      return 'Transferencia realizada';
     case 'refunded':
       return 'Reembolsado';
     case 'failed':
@@ -69,14 +95,33 @@ String paymentStatusLabel(dynamic value) {
   }
 }
 
+Color paymentStatusColor(dynamic value) {
+  switch (value?.toString().toLowerCase()) {
+    case 'paid_to_provider':
+      return AppColors.success;
+    case 'held':
+    case 'approved':
+      return AppColors.primaryMedium;
+    case 'release_pending':
+    case 'pending':
+      return AppColors.warning;
+    case 'refunded':
+      return AppColors.information;
+    case 'failed':
+      return AppColors.danger;
+    default:
+      return AppColors.textSecondary;
+  }
+}
+
 String encounterStatusLabel(dynamic value) {
   switch (value?.toString().toLowerCase()) {
     case 'client_arrived':
-      return 'El solicitante llegó';
+      return 'El solicitante ya llegó';
     case 'provider_arrived':
-      return 'El prestador llegó';
+      return 'El acompañante ya llegó';
     case 'both_arrived':
-      return 'Ambos confirmaron llegada';
+      return 'Ambos están en el punto';
     case 'confirmed':
       return 'Encuentro confirmado';
     case 'not_arrived':
@@ -87,13 +132,30 @@ String encounterStatusLabel(dynamic value) {
 }
 
 String formatDateTime(dynamic raw) {
-  if (raw == null) return '—';
+  if (raw == null) {
+    return '—';
+  }
   final parsed = DateTime.tryParse(raw.toString());
-  if (parsed == null) return raw.toString();
+  if (parsed == null) {
+    return raw.toString();
+  }
   final local = parsed.toLocal();
   String two(int value) => value.toString().padLeft(2, '0');
   return '${two(local.day)}/${two(local.month)}/${local.year} '
       '${two(local.hour)}:${two(local.minute)}';
+}
+
+String formatShortDateTime(dynamic raw) {
+  if (raw == null) {
+    return '—';
+  }
+  final parsed = DateTime.tryParse(raw.toString());
+  if (parsed == null) {
+    return raw.toString();
+  }
+  final local = parsed.toLocal();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${two(local.day)}/${two(local.month)} · ${two(local.hour)}:${two(local.minute)}';
 }
 
 String formatCop(dynamic raw) {
@@ -107,12 +169,14 @@ String formatCop(dynamic raw) {
       buffer.write('.');
     }
   }
-  return '\$${buffer.toString()} COP';
+  return '\$${buffer.toString()}';
 }
 
 String formatDistance(dynamic raw) {
   final meters = double.tryParse(raw?.toString() ?? '');
-  if (meters == null) return 'Sin ubicación de ambas personas';
+  if (meters == null) {
+    return 'Sin ubicación de ambas personas';
+  }
   if (meters >= 1000) {
     return '${(meters / 1000).toStringAsFixed(1)} km';
   }

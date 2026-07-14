@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/service_display.dart';
 import '../../../shared/widgets/service_rating_dialog.dart';
 import '../../service_request/data/location_ping_service.dart';
@@ -49,7 +51,9 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
 
   int? get _id {
     final value = _request['id'];
-    if (value is int) return value;
+    if (value is int) {
+      return value;
+    }
     return int.tryParse(value?.toString() ?? '');
   }
 
@@ -61,7 +65,9 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
   }
 
   double _double(dynamic value, double fallback) {
-    if (value is num) return value.toDouble();
+    if (value is num) {
+      return value.toDouble();
+    }
     return double.tryParse(value?.toString() ?? '') ?? fallback;
   }
 
@@ -69,14 +75,22 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
 
   Future<void> _reload({bool silent = false}) async {
     final requestId = _id;
-    if (requestId == null) return;
-    if (!silent) setState(() => _refreshing = true);
+    if (requestId == null) {
+      return;
+    }
+    if (!silent) {
+      setState(() => _refreshing = true);
+    }
     try {
       final fresh = await _queryService.getRequestById(requestId);
-      if (!mounted || fresh == null) return;
+      if (!mounted || fresh == null) {
+        return;
+      }
       setState(() => _request = fresh);
     } finally {
-      if (mounted && !silent) setState(() => _refreshing = false);
+      if (mounted && !silent) {
+        setState(() => _refreshing = false);
+      }
     }
   }
 
@@ -84,13 +98,17 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     final data = error.response?.data;
     if (data is Map) {
       final value = data['detail'] ?? data['code'];
-      if (value != null) return value.toString();
+      if (value != null) {
+        return value.toString();
+      }
     }
     return error.message ?? 'No fue posible completar la operación.';
   }
 
   void _message(String value) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
   }
 
@@ -98,18 +116,24 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     setState(() => _loading = true);
     try {
       final updated = await action();
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _request = updated);
     } on DioException catch (error) {
       _message(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _sendDemoLocation({required bool meetingPoint}) async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final baseLat = _double(_request['location_lat'], 4.6767);
     final baseLng = _double(_request['location_lng'], -74.0482);
     final latitude = meetingPoint ? baseLat : baseLat - 0.011;
@@ -131,13 +155,17 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     } on DioException catch (error) {
       _message(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _confirmArrival() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final baseLat = _double(_request['location_lat'], 4.6767);
     final baseLng = _double(_request['location_lng'], -74.0482);
 
@@ -150,7 +178,9 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
         source: 'arrival_confirmation',
       );
       final updated = await _lifecycleService.arrive(requestId);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _request = updated);
       _message(
         'Llegada confirmada. La ubicación se actualizó automáticamente.',
@@ -158,13 +188,17 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     } on DioException catch (error) {
       _message(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _startService() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     if (_codeCtrl.text.trim().length != 4) {
       _message('Ingresa el código de cuatro dígitos del solicitante.');
       return;
@@ -174,14 +208,16 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
 
   Future<void> _cancel() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     String code = 'cannot_arrive';
     final reasonCtrl = TextEditingController();
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Cancelar servicio'),
+          title: const Text('Cancelar actividad'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -208,7 +244,9 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
                   DropdownMenuItem(value: 'other', child: Text('Otro')),
                 ],
                 onChanged: (value) {
-                  if (value != null) setDialogState(() => code = value);
+                  if (value != null) {
+                    setDialogState(() => code = value);
+                  }
                 },
               ),
               const SizedBox(height: 12),
@@ -232,14 +270,16 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
                 'code': code,
                 'reason': reasonCtrl.text,
               }),
-              child: const Text('Cancelar servicio'),
+              child: const Text('Cancelar actividad'),
             ),
           ],
         ),
       ),
     );
     reasonCtrl.dispose();
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
     await _run(
       () => _lifecycleService.cancel(
         requestId: requestId,
@@ -251,12 +291,16 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
 
   Future<void> _reportRisk() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final result = await showDialog<_RiskReportData>(
       context: context,
       builder: (_) => const _RiskReportDialog(isProvider: true),
     );
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
     try {
       await _lifecycleService.reportRisk(
         requestId: requestId,
@@ -275,18 +319,24 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
 
   Future<void> _finishAndRate() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
 
     final rating = await showRequiredServiceRatingDialog(
       context,
       targetLabel: 'el solicitante',
     );
-    if (rating == null || !mounted) return;
+    if (rating == null || !mounted) {
+      return;
+    }
 
     setState(() => _loading = true);
     try {
       final updated = await _lifecycleService.finish(requestId);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _request = updated);
 
       try {
@@ -311,19 +361,25 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     } on DioException catch (error) {
       _message(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _rateClient() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final result = await showRequiredServiceRatingDialog(
       context,
       targetLabel: 'el solicitante',
       includeFinishMessage: false,
     );
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
     try {
       await _lifecycleService.rate(
         requestId: requestId,
@@ -339,19 +395,25 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
 
   Map<String, dynamic>? _latestLateNotice(List<Map<String, dynamic>> timeline) {
     for (final event in timeline.reversed) {
-      if (event['event_type']?.toString() == 'late_notice') return event;
+      if (event['event_type']?.toString() == 'late_notice') {
+        return event;
+      }
     }
     return null;
   }
 
   Future<void> _notifyLateArrival() async {
     final requestId = _id;
-    if (requestId == null) return;
+    if (requestId == null) {
+      return;
+    }
     final result = await showDialog<_LateArrivalData>(
       context: context,
       builder: (_) => const _LateArrivalDialog(),
     );
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
     await _run(
       () => _lifecycleService.notifyLateArrival(
         requestId: requestId,
@@ -374,7 +436,7 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     final lateNotice = _latestLateNotice(timeline);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Servicio del prestador'),
+        title: const Text('Actividad en curso'),
         actions: [
           IconButton(
             onPressed: _refreshing ? null : () => _reload(),
@@ -383,7 +445,7 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
           _headerCard(),
           if (lateNotice != null) ...[
@@ -422,7 +484,7 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     return Card(
       color: serviceStatusColor(_status).withValues(alpha: 0.12),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -451,12 +513,12 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     final canFinish = _bool(_request['can_finish']);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'Operación del servicio',
+              'Seguimiento de la actividad',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -484,7 +546,7 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
               const SizedBox(height: 8),
               const ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.check_circle, color: Colors.green),
+                leading: Icon(Icons.check_circle, color: AppColors.success),
                 title: Text('Tu llegada ya está confirmada'),
                 subtitle: Text(
                   'El campo del código aparecerá arriba cuando el solicitante también llegue.',
@@ -521,11 +583,11 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     final eta = metadata['eta_minutes'];
     final actor = event['actor_username']?.toString() ?? 'La otra persona';
     return Card(
-      color: Colors.orange.shade50,
+      color: AppColors.tint(AppColors.warning, 0.08),
       child: ListTile(
         leading: const Icon(
           Icons.access_time_filled_outlined,
-          color: Colors.orange,
+          color: AppColors.warning,
         ),
         title: Text('$actor informó que llegará tarde'),
         subtitle: Text(
@@ -539,15 +601,15 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
 
   Widget _startCodeEntryCard() {
     return Card(
-      color: Colors.blue.shade50,
+      color: AppColors.tint(AppColors.primary, 0.07),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Row(
               children: [
-                Icon(Icons.pin_outlined, color: Colors.blue),
+                Icon(Icons.pin_outlined, color: AppColors.primary),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -577,7 +639,9 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
                 border: OutlineInputBorder(),
               ),
               onSubmitted: (_) {
-                if (!_loading) _startService();
+                if (!_loading) {
+                  _startService();
+                }
               },
             ),
             const SizedBox(height: 8),
@@ -595,7 +659,7 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
   Widget _proximityCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -634,12 +698,12 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
   Widget _paymentCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Ganancia del servicio',
+              'Ganancia de la actividad',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -656,7 +720,7 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
                   Icons.schedule_send_outlined,
-                  color: Colors.orange,
+                  color: AppColors.warning,
                 ),
                 title: Text('Transferencia pendiente'),
                 subtitle: Text(
@@ -667,7 +731,7 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
                 'paid_to_provider')
               const ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.check_circle, color: Colors.green),
+                leading: Icon(Icons.check_circle, color: AppColors.success),
                 title: Text('Transferencia realizada'),
                 subtitle: Text('La plataforma registró el envío a tu cuenta.'),
               ),
@@ -681,7 +745,7 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     final rating = _request['my_rating'];
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: rating is Map
             ? Text(
                 'Tu calificación al solicitante: ${rating['score']}/5\n${rating['comment'] ?? ''}',
@@ -708,10 +772,12 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
   Widget _actionCard() {
     final canCancel = _bool(_request['can_cancel']);
     final riskEnabled = const {'matched', 'started', 'ended'}.contains(_status);
-    if (!canCancel && !riskEnabled) return const SizedBox.shrink();
+    if (!canCancel && !riskEnabled) {
+      return const SizedBox.shrink();
+    }
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -728,13 +794,13 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
               OutlinedButton.icon(
                 onPressed: _loading ? null : _cancel,
                 icon: const Icon(Icons.cancel_outlined),
-                label: const Text('Cancelar servicio'),
+                label: const Text('Cancelar actividad'),
               ),
             if (riskEnabled)
               TextButton.icon(
                 onPressed: _loading ? null : _reportRisk,
-                icon: const Icon(Icons.warning_amber, color: Colors.red),
-                label: const Text('Reportar un caso de riesgo'),
+                icon: const Icon(Icons.warning_amber, color: AppColors.danger),
+                label: const Text('Reportar una situación'),
               ),
           ],
         ),
@@ -745,7 +811,7 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
   Widget _timelineCard(List<Map<String, dynamic>> timeline) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -817,7 +883,9 @@ class _LateArrivalDialogState extends State<_LateArrivalDialog> {
                 )
                 .toList(),
             onChanged: (value) {
-              if (value != null) setState(() => _eta = value);
+              if (value != null) {
+                setState(() => _eta = value);
+              }
             },
           ),
           const SizedBox(height: 12),
@@ -887,7 +955,7 @@ class _RiskReportDialogState extends State<_RiskReportDialog> {
       'otro': 'Otro',
     };
     return AlertDialog(
-      title: const Text('Reportar un caso de riesgo'),
+      title: const Text('Reportar una situación'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -901,7 +969,9 @@ class _RiskReportDialogState extends State<_RiskReportDialog> {
                 DropdownMenuItem(value: 'alta', child: Text('Alta')),
               ],
               onChanged: (value) {
-                if (value != null) setState(() => _level = value);
+                if (value != null) {
+                  setState(() => _level = value);
+                }
               },
             ),
             const SizedBox(height: 12),
@@ -917,7 +987,9 @@ class _RiskReportDialogState extends State<_RiskReportDialog> {
                   )
                   .toList(),
               onChanged: (value) {
-                if (value != null) setState(() => _reason = value);
+                if (value != null) {
+                  setState(() => _reason = value);
+                }
               },
             ),
             const SizedBox(height: 12),
