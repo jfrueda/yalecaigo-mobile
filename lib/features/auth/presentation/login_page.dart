@@ -37,9 +37,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     if (kDebugMode) {
-      debugPrint(
-        '[LOGIN] Backend: ${AppConfig.normalizedBaseUrl}',
-      );
+      debugPrint('[LOGIN] Backend: ${AppConfig.normalizedBaseUrl}');
     }
 
     try {

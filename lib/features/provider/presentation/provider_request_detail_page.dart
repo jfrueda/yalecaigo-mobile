@@ -47,9 +47,13 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
       _message = null;
     });
     try {
-      final response = await ApiClient.dio.post(Endpoints.acceptRequest(requestId));
+      final response = await ApiClient.dio.post(
+        Endpoints.acceptRequest(requestId),
+      );
       if (!mounted) return;
-      setState(() => _request = Map<String, dynamic>.from(response.data as Map));
+      setState(
+        () => _request = Map<String, dynamic>.from(response.data as Map),
+      );
       Navigator.of(context).pop(true);
     } on DioException catch (error) {
       if (!mounted) return;
@@ -85,7 +89,9 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
           const SizedBox(height: 8),
           Text(_request['location_text']?.toString() ?? 'Sin ubicación'),
           Text('Inicio: ${formatDateTime(_request['requested_start_time'])}'),
-          Text('Duración: ${_request['requested_duration_minutes'] ?? '—'} min'),
+          Text(
+            'Duración: ${_request['requested_duration_minutes'] ?? '—'} min',
+          ),
           const SizedBox(height: 12),
           SizedBox(
             height: 210,
@@ -95,7 +101,8 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
                 options: MapOptions(initialCenter: point, initialZoom: 15),
                 children: [
                   TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'opentic.co.yalecaigo',
                   ),
                   MarkerLayer(
@@ -104,7 +111,11 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
                         point: point,
                         width: 44,
                         height: 44,
-                        child: const Icon(Icons.location_pin, size: 44, color: Colors.red),
+                        child: const Icon(
+                          Icons.location_pin,
+                          size: 44,
+                          color: Colors.red,
+                        ),
                       ),
                     ],
                   ),
@@ -119,7 +130,10 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Pago y ganancia', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Pago y ganancia',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   Text('Pago: ${paymentStatusLabel(payment['status'])}'),
                   Text('Valor total: ${formatCop(payment['amount_total'])}'),
                   Text('Comisión: ${formatCop(payment['platform_fee'])}'),

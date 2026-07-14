@@ -27,9 +27,7 @@ class PublicApiClient {
       client.interceptors.add(
         InterceptorsWrapper(
           onRequest: (options, handler) {
-            debugPrint(
-              '[API PUBLIC] --> ${options.method} ${options.uri}',
-            );
+            debugPrint('[API PUBLIC] --> ${options.method} ${options.uri}');
             handler.next(options);
           },
           onResponse: (response, handler) {

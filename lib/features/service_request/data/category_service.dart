@@ -30,7 +30,8 @@ class CategoryItem {
     return CategoryItem(
       id: id,
       name: name,
-      description: rawDescription.length >= 25 &&
+      description:
+          rawDescription.length >= 25 &&
               !rawDescription.toLowerCase().contains('prueba')
           ? rawDescription
           : _fallbackDescription(name),

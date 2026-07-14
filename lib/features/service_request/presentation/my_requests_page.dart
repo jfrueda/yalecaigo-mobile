@@ -34,6 +34,9 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
     await _future;
   }
 
+  double _toDouble(dynamic value) =>
+      double.tryParse(value?.toString() ?? '0') ?? 0;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -55,7 +58,9 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
               return ListView(
                 children: [
                   const SizedBox(height: 180),
-                  Center(child: Text('No fue posible cargar: ${snapshot.error}')),
+                  Center(
+                    child: Text('No fue posible cargar: ${snapshot.error}'),
+                  ),
                 ],
               );
             }
@@ -82,20 +87,103 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
                   ),
                 )
                 .toList();
+            final totalValue = items.fold<double>(
+              0,
+              (sum, item) => sum + _toDouble(item['calculated_price']),
+            );
+            final finishedValue = history.fold<double>(
+              0,
+              (sum, item) => sum + _toDouble(item['calculated_price']),
+            );
+            final byStatus = <String, int>{};
+            for (final item in items) {
+              final status =
+                  item['status']?.toString().toLowerCase() ?? 'unknown';
+              byStatus[status] = (byStatus[status] ?? 0) + 1;
+            }
+
             return ListView(
               padding: const EdgeInsets.all(12),
               children: [
+                const _SectionTitle('Dashboard del solicitante'),
+                _DashboardGrid(
+                  children: [
+                    _MetricCard(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Solicitudes',
+                      value: items.length.toString(),
+                      subtitle: 'Total registradas',
+                    ),
+                    _MetricCard(
+                      icon: Icons.timelapse_outlined,
+                      title: 'Activas',
+                      value: active.length.toString(),
+                      subtitle: 'En curso o gestión',
+                    ),
+                    _MetricCard(
+                      icon: Icons.payments_outlined,
+                      title: 'Valor total',
+                      value: formatCop(totalValue),
+                      subtitle: 'Todas tus solicitudes',
+                    ),
+                    _MetricCard(
+                      icon: Icons.task_alt_outlined,
+                      title: 'Finalizadas',
+                      value: '${byStatus['ended'] ?? 0}',
+                      subtitle: formatCop(finishedValue),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _StatusChip(
+                          label: 'Pendientes pago',
+                          count: byStatus['pending_payment'] ?? 0,
+                        ),
+                        _StatusChip(
+                          label: 'Buscando',
+                          count: byStatus['searching'] ?? 0,
+                        ),
+                        _StatusChip(
+                          label: 'Encuentro',
+                          count: byStatus['matched'] ?? 0,
+                        ),
+                        _StatusChip(
+                          label: 'En curso',
+                          count: byStatus['started'] ?? 0,
+                        ),
+                        _StatusChip(
+                          label: 'Finalizadas',
+                          count: byStatus['ended'] ?? 0,
+                        ),
+                        _StatusChip(
+                          label: 'Canceladas',
+                          count: byStatus['cancelled'] ?? 0,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 if (active.isNotEmpty) ...[
+                  const SizedBox(height: 12),
                   const _SectionTitle('Solicitud activa'),
                   ...active.map(_requestCard),
-                  const SizedBox(height: 12),
                 ],
+                const SizedBox(height: 12),
                 const _SectionTitle('Histórico'),
                 if (history.isEmpty)
                   const Card(
                     child: Padding(
                       padding: EdgeInsets.all(16),
-                      child: Text('Aún no tienes servicios finalizados o cancelados.'),
+                      child: Text(
+                        'Aún no tienes servicios finalizados o cancelados.',
+                      ),
                     ),
                   )
                 else
@@ -127,7 +215,7 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
           '${serviceStatusLabel(request['status'])}\n'
           '${request['location_text'] ?? 'Sin ubicación'}\n'
           '${formatDateTime(request['requested_start_time'])}\n'
-          'Pago: ${paymentStatusLabel(payment['status'])}',
+          'Valor: ${formatCop(request['calculated_price'])} · Pago: ${paymentStatusLabel(payment['status'])}',
         ),
         isThreeLine: true,
         trailing: const Icon(Icons.chevron_right),
@@ -158,5 +246,77 @@ class _SectionTitle extends StatelessWidget {
         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
       ),
     );
+  }
+}
+
+class _DashboardGrid extends StatelessWidget {
+  const _DashboardGrid({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: children
+          .map(
+            (child) => SizedBox(
+              width: (MediaQuery.of(context).size.width - 34) / 2,
+              child: child,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon),
+            const SizedBox(height: 10),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(subtitle, style: const TextStyle(color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(label: Text('$label: $count'));
   }
 }

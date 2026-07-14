@@ -8,7 +8,9 @@ class PaymentService {
   }
 
   Future<Map<String, dynamic>> simulateApproval(int requestId) async {
-    final response = await ApiClient.dio.post(Endpoints.simulatePayment(requestId));
+    final response = await ApiClient.dio.post(
+      Endpoints.simulatePayment(requestId),
+    );
     return Map<String, dynamic>.from(response.data as Map);
   }
 }

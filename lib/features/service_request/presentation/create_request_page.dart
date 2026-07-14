@@ -143,7 +143,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
         _locationResults = allowed;
         _locationError = allowed.isEmpty
             ? 'No encontramos un punto público permitido. Busca un parque, '
-                'café, centro comercial, biblioteca o restaurante.'
+                  'café, centro comercial, biblioteca o restaurante.'
             : null;
       });
     } catch (_) {
@@ -220,7 +220,13 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     if (time == null) return;
     setState(() {
       _needNow = false;
-      _startTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _startTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
     });
   }
 
@@ -272,12 +278,50 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       setState(() {
         _result = error.response?.data is Map
             ? (error.response?.data['detail']?.toString() ??
-                'No fue posible crear la solicitud.')
+                  'No fue posible crear la solicitud.')
             : 'No fue posible crear la solicitud.';
       });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  IconData _categoryIcon(CategoryItem category) {
+    final value = category.name.toLowerCase();
+    if (value.contains('méd') || value.contains('salud'))
+      return Icons.local_hospital_outlined;
+    if (value.contains('compra') || value.contains('merc'))
+      return Icons.shopping_bag_outlined;
+    if (value.contains('trámite') || value.contains('dilig'))
+      return Icons.assignment_outlined;
+    if (value.contains('estudio') || value.contains('clase'))
+      return Icons.menu_book_outlined;
+    if (value.contains('deporte') || value.contains('caminar'))
+      return Icons.directions_walk_outlined;
+    if (value.contains('comida') ||
+        value.contains('café') ||
+        value.contains('rest'))
+      return Icons.restaurant_outlined;
+    return Icons.people_alt_outlined;
+  }
+
+  String _categoryHint(CategoryItem category) {
+    final value = category.name.toLowerCase();
+    if (value.contains('méd') || value.contains('salud')) {
+      return 'Ideal para citas, controles o acompañamiento a centros de salud.';
+    }
+    if (value.contains('compra') || value.contains('merc')) {
+      return 'Para compras, vueltas rápidas o apoyo en recorridos cortos.';
+    }
+    if (value.contains('trámite') || value.contains('dilig')) {
+      return 'Para bancos, notarías, oficinas y gestiones personales.';
+    }
+    if (value.contains('estudio') || value.contains('clase')) {
+      return 'Para estudiar, practicar o asistir a actividades académicas.';
+    }
+    return category.description.isNotEmpty
+        ? category.description
+        : 'Selecciona esta opción si es la que mejor se parece a tu necesidad.';
   }
 
   Widget _categoryField() {
@@ -290,40 +334,90 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           '1. ¿Qué acompañamiento necesitas?',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
         ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<int>(
-          key: ValueKey(_selectedCategoryId),
-          initialValue: _selectedCategoryId,
-          decoration: const InputDecoration(
-            labelText: 'Selecciona la actividad',
-            prefixIcon: Icon(Icons.category_outlined),
-            border: OutlineInputBorder(),
-          ),
-          isExpanded: true,
-          items: _categories
-              .map(
-                (category) => DropdownMenuItem<int>(
-                  value: category.id,
-                  child: Text(category.name),
+        const SizedBox(height: 6),
+        const Text(
+          'Toca una tarjeta para indicar la actividad principal.',
+          style: TextStyle(color: Colors.grey),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: _categories.map((category) {
+            final selectedCard = category.id == _selectedCategoryId;
+            return SizedBox(
+              width: (MediaQuery.of(context).size.width - 52) / 2,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => setState(() => _selectedCategoryId = category.id),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: selectedCard
+                        ? Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer.withValues(alpha: 0.9)
+                        : Theme.of(context).colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: selectedCard
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).dividerColor,
+                      width: selectedCard ? 1.8 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: selectedCard
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.surface,
+                        child: Icon(
+                          _categoryIcon(category),
+                          color: selectedCard
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        category.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _categoryHint(category),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12.5),
+                      ),
+                    ],
+                  ),
                 ),
-              )
-              .toList(),
-          onChanged: (value) => setState(() => _selectedCategoryId = value),
-          validator: (value) => value == null ? 'Selecciona una categoría' : null,
+              ),
+            );
+          }).toList(),
         ),
         if (selected != null) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.45),
+              color: Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  Icons.info_outline,
+                  _categoryIcon(selected),
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 10),
@@ -332,11 +426,11 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        selected.name,
+                        'Harás una solicitud de ${selected.name.toLowerCase()}.',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
-                      Text(selected.description),
+                      Text(_categoryHint(selected)),
                     ],
                   ),
                 ),
@@ -379,9 +473,58 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                   ),
                 ],
               ),
+              SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(
+                    avatar: Icon(Icons.park_outlined, size: 18),
+                    label: Text('Parques'),
+                  ),
+                  Chip(
+                    avatar: Icon(Icons.local_cafe_outlined, size: 18),
+                    label: Text('Cafés'),
+                  ),
+                  Chip(
+                    avatar: Icon(Icons.restaurant_outlined, size: 18),
+                    label: Text('Restaurantes'),
+                  ),
+                  Chip(
+                    avatar: Icon(Icons.local_library_outlined, size: 18),
+                    label: Text('Bibliotecas'),
+                  ),
+                  Chip(
+                    avatar: Icon(Icons.store_mall_directory_outlined, size: 18),
+                    label: Text('Centros comerciales'),
+                  ),
+                ],
+              ),
+              SizedBox(height: 10),
+              Text('No permitidos en la primera reunión:'),
               SizedBox(height: 8),
-              Text('✓ Permitidos: parques, cafés, restaurantes, bibliotecas y centros comerciales.'),
-              Text('✕ No permitidos: viviendas, apartamentos, hoteles ni habitaciones.'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(
+                    avatar: Icon(Icons.house_outlined, size: 18),
+                    label: Text('Viviendas'),
+                  ),
+                  Chip(
+                    avatar: Icon(Icons.apartment_outlined, size: 18),
+                    label: Text('Apartamentos'),
+                  ),
+                  Chip(
+                    avatar: Icon(Icons.hotel_outlined, size: 18),
+                    label: Text('Hoteles'),
+                  ),
+                  Chip(
+                    avatar: Icon(Icons.king_bed_outlined, size: 18),
+                    label: Text('Habitaciones'),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -597,7 +740,8 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
                   (range) => ChoiceChip(
                     label: Text('${range.min}-${range.max}'),
                     selected: _selectedAgeRange == range,
-                    onSelected: (_) => setState(() => _selectedAgeRange = range),
+                    onSelected: (_) =>
+                        setState(() => _selectedAgeRange = range),
                   ),
                 ),
               ],
@@ -657,7 +801,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
               child: ListTile(
                 leading: const Icon(Icons.payments_outlined),
                 title: const Text('Valor estimado'),
-                subtitle: const Text('El pago demo se confirma en el siguiente paso.'),
+                subtitle: const Text(
+                  'El pago demo se confirma en el siguiente paso.',
+                ),
                 trailing: Text(
                   formatCop(_estimatedPrice),
                   style: const TextStyle(fontWeight: FontWeight.bold),

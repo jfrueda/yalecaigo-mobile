@@ -18,6 +18,7 @@ abstract final class Endpoints {
   static String arriveRequest(int id) => '/services/requests/$id/arrive/';
   static String startRequest(int id) => '/services/requests/$id/start/';
   static String finishRequest(int id) => '/services/requests/$id/finish/';
+  static String lateRequest(int id) => '/services/requests/$id/late/';
   static String cancelRequest(int id) => '/services/requests/$id/cancel/';
   static String rateRequest(int id) => '/services/requests/$id/rate/';
 

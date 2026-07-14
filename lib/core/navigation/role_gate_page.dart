@@ -88,9 +88,7 @@ class _RoleGatePageState extends State<RoleGatePage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_error != null) {
@@ -206,10 +204,7 @@ class _MessagePage extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: onPrimary,
-                  child: Text(primaryLabel),
-                ),
+                FilledButton(onPressed: onPrimary, child: Text(primaryLabel)),
               ],
             ),
           ),

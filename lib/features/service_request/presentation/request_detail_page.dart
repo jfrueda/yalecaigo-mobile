@@ -34,7 +34,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   void initState() {
     super.initState();
     _request = Map<String, dynamic>.from(widget.request);
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) => _reload(silent: true));
+    _timer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _reload(silent: true),
+    );
   }
 
   @override
@@ -76,7 +79,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     }
   }
 
-  Future<void> _runAction(Future<Map<String, dynamic>> Function() action) async {
+  Future<void> _runAction(
+    Future<Map<String, dynamic>> Function() action,
+  ) async {
     setState(() => _loading = true);
     try {
       final updated = await action();
@@ -100,7 +105,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _simulatePayment() async {
@@ -164,7 +171,9 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       final updated = await _lifecycleService.arrive(requestId);
       if (!mounted) return;
       setState(() => _request = updated);
-      _showMessage('Llegada confirmada. La ubicación se actualizó automáticamente.');
+      _showMessage(
+        'Llegada confirmada. La ubicación se actualizó automáticamente.',
+      );
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
     } finally {
@@ -192,35 +201,22 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   Future<void> _reportRisk() async {
     final requestId = _id;
     if (requestId == null) return;
-    final confirmed = await showDialog<bool>(
+    final result = await showDialog<_RiskReportData>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reportar un caso de riesgo'),
-        content: const Text(
-          'Se marcará el servicio para revisión administrativa. En una emergencia real debes comunicarte con la línea local de emergencias.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Volver'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Reportar'),
-          ),
-        ],
-      ),
+      builder: (_) => const _RiskReportDialog(isProvider: false),
     );
-    if (confirmed != true) return;
+    if (result == null) return;
     try {
       await _lifecycleService.reportRisk(
         requestId: requestId,
-        reason: 'El solicitante reportó un riesgo desde el MVP.',
+        reason: '[${result.level}] ${result.reason}: ${result.details}'.trim(),
         latitude: _double(_request['location_lat'], 4.6767),
         longitude: _double(_request['location_lng'], -74.0482),
       );
       await _reload();
-      _showMessage('Caso de riesgo enviado al administrador.');
+      _showMessage(
+        'Reporte de riesgo enviado. Si es una emergencia real, comunícate de inmediato con la línea local de emergencias.',
+      );
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
     }
@@ -290,6 +286,33 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     }
   }
 
+  Map<String, dynamic>? _latestLateNotice(List<Map<String, dynamic>> timeline) {
+    for (final event in timeline.reversed) {
+      if (event['event_type']?.toString() == 'late_notice') {
+        return event;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _notifyLateArrival() async {
+    final requestId = _id;
+    if (requestId == null) return;
+    final result = await showDialog<_LateArrivalData>(
+      context: context,
+      builder: (_) => const _LateArrivalDialog(),
+    );
+    if (result == null) return;
+    await _runAction(
+      () => _lifecycleService.notifyLateArrival(
+        requestId: requestId,
+        etaMinutes: result.etaMinutes,
+        message: result.message,
+      ),
+    );
+    _showMessage('Se notificó a la otra parte que llegarás tarde.');
+  }
+
   @override
   Widget build(BuildContext context) {
     final requestId = _id;
@@ -297,10 +320,11 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     final timeline = (_request['timeline'] is List)
         ? List<Map<String, dynamic>>.from(
             (_request['timeline'] as List).whereType<Map>().map(
-                  (item) => Map<String, dynamic>.from(item),
-                ),
+              (item) => Map<String, dynamic>.from(item),
+            ),
           )
         : const <Map<String, dynamic>>[];
+    final lateNotice = _latestLateNotice(timeline);
 
     return Scaffold(
       appBar: AppBar(
@@ -317,6 +341,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         padding: const EdgeInsets.all(16),
         children: [
           _statusCard(),
+          if (lateNotice != null) ...[
+            const SizedBox(height: 12),
+            _lateNoticeCard(lateNotice),
+          ],
           if (_status == 'matched' &&
               _request['encounter_status']?.toString() == 'both_arrived') ...[
             const SizedBox(height: 12),
@@ -355,7 +383,11 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(serviceStatusIcon(_status), color: serviceStatusColor(_status), size: 36),
+            Icon(
+              serviceStatusIcon(_status),
+              color: serviceStatusColor(_status),
+              size: 36,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -363,10 +395,15 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 children: [
                   Text(
                     serviceStatusLabel(_status),
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   if (_request['assigned_provider_username'] != null)
-                    Text('Acompañante: ${_request['assigned_provider_username']}'),
+                    Text(
+                      'Acompañante: ${_request['assigned_provider_username']}',
+                    ),
                 ],
               ),
             ),
@@ -383,12 +420,18 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Detalle del servicio', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Detalle del servicio',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 10),
             _row('Actividad', _request['category_name']),
             _row('Punto', _request['location_text']),
             _row('Inicio', formatDateTime(_request['requested_start_time'])),
-            _row('Duración', '${_request['requested_duration_minutes'] ?? '—'} min'),
+            _row(
+              'Duración',
+              '${_request['requested_duration_minutes'] ?? '—'} min',
+            ),
             _row('Valor', formatCop(_request['calculated_price'])),
             if ((_request['notes']?.toString().trim() ?? '').isNotEmpty)
               _row('Notas', _request['notes']),
@@ -399,7 +442,8 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   }
 
   Widget _paymentCard(dynamic paymentStatus) {
-    final isPending = _status == 'pending_payment' && paymentStatus == 'pending';
+    final isPending =
+        _status == 'pending_payment' && paymentStatus == 'pending';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -409,7 +453,12 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
             const Text('Pago', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _row('Estado', paymentStatusLabel(paymentStatus)),
-            _row('Total', formatCop(_payment['amount_total'] ?? _request['calculated_price'])),
+            _row(
+              'Total',
+              formatCop(
+                _payment['amount_total'] ?? _request['calculated_price'],
+              ),
+            ),
             _row('Comisión demo', formatCop(_payment['platform_fee'])),
             if (isPending) ...[
               const SizedBox(height: 8),
@@ -422,6 +471,31 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 'Este botón reemplaza temporalmente la pasarela real para el video del MVP.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
+              ),
+            ],
+            if (!isPending && paymentStatus == 'release_pending') ...[
+              const SizedBox(height: 8),
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.schedule_send_outlined,
+                  color: Colors.orange,
+                ),
+                title: Text('Transferencia pendiente'),
+                subtitle: Text(
+                  'La actividad ya terminó y el pago está listo para ser transferido al prestador.',
+                ),
+              ),
+            ],
+            if (paymentStatus == 'paid_to_provider') ...[
+              const SizedBox(height: 8),
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.check_circle, color: Colors.green),
+                title: Text('Transferencia realizada'),
+                subtitle: Text(
+                  'La plataforma registró que el valor fue transferido a la cuenta del prestador.',
+                ),
               ),
             ],
           ],
@@ -443,10 +517,13 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              _request['proximity_label']?.toString() ?? 'Esperando ubicaciones',
+              _request['proximity_label']?.toString() ??
+                  'Esperando ubicaciones',
               style: const TextStyle(fontSize: 17),
             ),
-            Text('Distancia aproximada: ${formatDistance(_request['distance_meters'])}'),
+            Text(
+              'Distancia aproximada: ${formatDistance(_request['distance_meters'])}',
+            ),
             const SizedBox(height: 8),
             const Text(
               'La cercanía es informativa. Al tocar “Ya llegué” se registra tu ubicación en el punto.',
@@ -461,6 +538,29 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               label: const Text('Demo: simular que estoy lejos'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _lateNoticeCard(Map<String, dynamic> event) {
+    final metadata = event['metadata'] is Map
+        ? Map<String, dynamic>.from(event['metadata'] as Map)
+        : <String, dynamic>{};
+    final eta = metadata['eta_minutes'];
+    final actor = event['actor_username']?.toString() ?? 'La otra persona';
+    return Card(
+      color: Colors.orange.shade50,
+      child: ListTile(
+        leading: const Icon(
+          Icons.access_time_filled_outlined,
+          color: Colors.orange,
+        ),
+        title: Text('$actor informó que llegará tarde'),
+        subtitle: Text(
+          eta == null
+              ? event['description']?.toString() ?? 'Llegará tarde.'
+              : 'Tiempo estimado: $eta minutos.\n${event['description'] ?? ''}',
         ),
       ),
     );
@@ -505,7 +605,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Encuentro', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Encuentro',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Text(encounterStatusLabel(_request['encounter_status'])),
             if (canArrive) ...[
@@ -514,6 +617,12 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 onPressed: _loading ? null : _confirmArrival,
                 icon: const Icon(Icons.place),
                 label: const Text('Ya llegué'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _notifyLateArrival,
+                icon: const Icon(Icons.access_time_outlined),
+                label: const Text('Llegaré tarde, ¿me puedes esperar?'),
               ),
               const Text(
                 'Un solo toque confirma tu llegada y actualiza la ubicación demo.',
@@ -527,12 +636,16 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.check_circle, color: Colors.green),
                 title: Text('Tu llegada ya está confirmada'),
-                subtitle: Text('El código aparecerá arriba cuando el prestador también llegue.'),
+                subtitle: Text(
+                  'El código aparecerá arriba cuando el prestador también llegue.',
+                ),
               ),
             ],
             if (_status == 'started') ...[
               const SizedBox(height: 8),
-              Text('Inicio confirmado: ${formatDateTime(_request['started_at'])}'),
+              Text(
+                'Inicio confirmado: ${formatDateTime(_request['started_at'])}',
+              ),
             ],
             if (canFinish) ...[
               const SizedBox(height: 12),
@@ -559,11 +672,16 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: rating is Map
-            ? Text('Tu calificación: ${rating['score']}/5\n${rating['comment'] ?? ''}')
+            ? Text(
+                'Tu calificación: ${rating['score']}/5\n${rating['comment'] ?? ''}',
+              )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('¿Cómo fue el servicio?', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    '¿Cómo fue el servicio?',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   FilledButton.icon(
                     onPressed: _rate,
@@ -586,7 +704,15 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Ayuda y seguridad', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Ayuda y seguridad',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Usa estas opciones solo si necesitas apoyo, reprogramación o reportar una novedad de seguridad.',
+              style: TextStyle(color: Colors.grey),
+            ),
             if (canCancel)
               OutlinedButton.icon(
                 onPressed: _loading ? null : _cancel,
@@ -612,13 +738,19 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Línea de tiempo', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Línea de tiempo',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             ...timeline.reversed.map(
               (event) => ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.circle, size: 12),
-                title: Text(event['description']?.toString() ?? event['event_type'].toString()),
+                title: Text(
+                  event['description']?.toString() ??
+                      event['event_type'].toString(),
+                ),
                 subtitle: Text(formatDateTime(event['created_at'])),
               ),
             ),
@@ -636,7 +768,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         children: [
           SizedBox(
             width: 120,
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
           Expanded(child: Text(value?.toString() ?? '—')),
         ],
@@ -663,6 +798,198 @@ IconData serviceStatusIcon(String status) {
       return Icons.warning;
     default:
       return Icons.info;
+  }
+}
+
+class _LateArrivalData {
+  const _LateArrivalData(this.etaMinutes, this.message);
+
+  final int etaMinutes;
+  final String message;
+}
+
+class _LateArrivalDialog extends StatefulWidget {
+  const _LateArrivalDialog();
+
+  @override
+  State<_LateArrivalDialog> createState() => _LateArrivalDialogState();
+}
+
+class _LateArrivalDialogState extends State<_LateArrivalDialog> {
+  int _eta = 10;
+  final _messageCtrl = TextEditingController();
+  static const _etas = [5, 10, 15, 20, 30, 45, 60];
+
+  @override
+  void dispose() {
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Llegaré tarde'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<int>(
+            initialValue: _eta,
+            decoration: const InputDecoration(
+              labelText: '¿En cuánto tiempo llegarás?',
+            ),
+            items: _etas
+                .map(
+                  (value) => DropdownMenuItem<int>(
+                    value: value,
+                    child: Text('$value minutos'),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value != null) setState(() => _eta = value);
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _messageCtrl,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Mensaje opcional',
+              hintText: 'Ej. Estoy en camino pero hay tráfico.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Volver'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            _LateArrivalData(_eta, _messageCtrl.text.trim()),
+          ),
+          child: const Text('Avisar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _RiskReportData {
+  const _RiskReportData(this.level, this.reason, this.details);
+
+  final String level;
+  final String reason;
+  final String details;
+}
+
+class _RiskReportDialog extends StatefulWidget {
+  const _RiskReportDialog({required this.isProvider});
+
+  final bool isProvider;
+
+  @override
+  State<_RiskReportDialog> createState() => _RiskReportDialogState();
+}
+
+class _RiskReportDialogState extends State<_RiskReportDialog> {
+  String _level = 'media';
+  String _reason = 'conducta_inapropiada';
+  final _detailsCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _detailsCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reasons = widget.isProvider
+        ? const {
+            'conducta_inapropiada': 'Conducta inapropiada',
+            'sitio_inseguro': 'Sitio inseguro',
+            'presion_o_amenaza': 'Presión o amenaza',
+            'incumplimiento': 'Incumplimiento del acuerdo',
+            'otro': 'Otro',
+          }
+        : const {
+            'conducta_inapropiada': 'Conducta inapropiada',
+            'sitio_inseguro': 'Sitio inseguro',
+            'acoso': 'Acoso o presión',
+            'incumplimiento': 'Incumplimiento del acuerdo',
+            'otro': 'Otro',
+          };
+    return AlertDialog(
+      title: const Text('Reportar un caso de riesgo'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _level,
+              decoration: const InputDecoration(labelText: 'Nivel de urgencia'),
+              items: const [
+                DropdownMenuItem(value: 'baja', child: Text('Baja')),
+                DropdownMenuItem(value: 'media', child: Text('Media')),
+                DropdownMenuItem(value: 'alta', child: Text('Alta')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _level = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _reason,
+              decoration: const InputDecoration(labelText: 'Motivo principal'),
+              items: reasons.entries
+                  .map(
+                    (entry) => DropdownMenuItem<String>(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _reason = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _detailsCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Detalle',
+                hintText: 'Describe brevemente lo ocurrido.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Importante: este reporte deja trazabilidad en la plataforma. En una emergencia real debes comunicarte de inmediato con la línea local de emergencias.',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Volver'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            _RiskReportData(_level, _reason, _detailsCtrl.text.trim()),
+          ),
+          child: const Text('Enviar reporte'),
+        ),
+      ],
+    );
   }
 }
 
@@ -745,7 +1072,10 @@ class _CancellationDialogState extends State<_CancellationDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Volver')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Volver'),
+        ),
         FilledButton(
           onPressed: () => Navigator.pop(
             context,

@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
 class ServiceRatingData {
-  const ServiceRatingData({
-    required this.score,
-    required this.comment,
-  });
+  const ServiceRatingData({required this.score, required this.comment});
 
   final int score;
   final String comment;

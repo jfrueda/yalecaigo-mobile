@@ -10,10 +10,7 @@ import '../../service_request/data/service_lifecycle_service.dart';
 import '../../service_request/data/service_request_query_service.dart';
 
 class ProviderActiveServicePage extends StatefulWidget {
-  const ProviderActiveServicePage({
-    super.key,
-    required this.serviceRequest,
-  });
+  const ProviderActiveServicePage({super.key, required this.serviceRequest});
 
   final Map<String, dynamic> serviceRequest;
 
@@ -37,7 +34,10 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
   void initState() {
     super.initState();
     _request = Map<String, dynamic>.from(widget.serviceRequest);
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) => _reload(silent: true));
+    _timer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _reload(silent: true),
+    );
   }
 
   @override
@@ -123,7 +123,11 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
         source: meetingPoint ? 'simulated_meeting_point' : 'simulated_far',
       );
       await _reload();
-      _message(meetingPoint ? 'Ubicación enviada en el punto.' : 'Ubicación lejana enviada.');
+      _message(
+        meetingPoint
+            ? 'Ubicación enviada en el punto.'
+            : 'Ubicación lejana enviada.',
+      );
     } on DioException catch (error) {
       _message(_errorMessage(error));
     } finally {
@@ -148,7 +152,9 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
       final updated = await _lifecycleService.arrive(requestId);
       if (!mounted) return;
       setState(() => _request = updated);
-      _message('Llegada confirmada. La ubicación se actualizó automáticamente.');
+      _message(
+        'Llegada confirmada. La ubicación se actualizó automáticamente.',
+      );
     } on DioException catch (error) {
       _message(_errorMessage(error));
     } finally {
@@ -183,10 +189,22 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
                 initialValue: code,
                 decoration: const InputDecoration(labelText: 'Motivo'),
                 items: const [
-                  DropdownMenuItem(value: 'cannot_arrive', child: Text('No puedo llegar')),
-                  DropdownMenuItem(value: 'client_no_show', child: Text('El solicitante no se presentó')),
-                  DropdownMenuItem(value: 'activity_mismatch', child: Text('La actividad no coincide')),
-                  DropdownMenuItem(value: 'unsafe', child: Text('No me siento seguro')),
+                  DropdownMenuItem(
+                    value: 'cannot_arrive',
+                    child: Text('No puedo llegar'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'client_no_show',
+                    child: Text('El solicitante no se presentó'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'activity_mismatch',
+                    child: Text('La actividad no coincide'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'unsafe',
+                    child: Text('No me siento seguro'),
+                  ),
                   DropdownMenuItem(value: 'other', child: Text('Otro')),
                 ],
                 onChanged: (value) {
@@ -205,12 +223,15 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Volver')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Volver'),
+            ),
             FilledButton(
-              onPressed: () => Navigator.pop(
-                context,
-                {'code': code, 'reason': reasonCtrl.text},
-              ),
+              onPressed: () => Navigator.pop(context, {
+                'code': code,
+                'reason': reasonCtrl.text,
+              }),
               child: const Text('Cancelar servicio'),
             ),
           ],
@@ -231,15 +252,22 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
   Future<void> _reportRisk() async {
     final requestId = _id;
     if (requestId == null) return;
+    final result = await showDialog<_RiskReportData>(
+      context: context,
+      builder: (_) => const _RiskReportDialog(isProvider: true),
+    );
+    if (result == null) return;
     try {
       await _lifecycleService.reportRisk(
         requestId: requestId,
-        reason: 'El prestador reportó un riesgo desde el MVP.',
+        reason: '[${result.level}] ${result.reason}: ${result.details}'.trim(),
         latitude: _double(_request['location_lat'], 4.6767),
         longitude: _double(_request['location_lng'], -74.0482),
       );
       await _reload();
-      _message('Incidente enviado para revisión administrativa.');
+      _message(
+        'Reporte de riesgo enviado. Si es una emergencia real, comunícate de inmediato con la línea local de emergencias.',
+      );
     } on DioException catch (error) {
       _message(_errorMessage(error));
     }
@@ -309,15 +337,41 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
     }
   }
 
+  Map<String, dynamic>? _latestLateNotice(List<Map<String, dynamic>> timeline) {
+    for (final event in timeline.reversed) {
+      if (event['event_type']?.toString() == 'late_notice') return event;
+    }
+    return null;
+  }
+
+  Future<void> _notifyLateArrival() async {
+    final requestId = _id;
+    if (requestId == null) return;
+    final result = await showDialog<_LateArrivalData>(
+      context: context,
+      builder: (_) => const _LateArrivalDialog(),
+    );
+    if (result == null) return;
+    await _run(
+      () => _lifecycleService.notifyLateArrival(
+        requestId: requestId,
+        etaMinutes: result.etaMinutes,
+        message: result.message,
+      ),
+    );
+    _message('Se notificó al solicitante que llegarás tarde.');
+  }
+
   @override
   Widget build(BuildContext context) {
     final timeline = (_request['timeline'] is List)
         ? List<Map<String, dynamic>>.from(
             (_request['timeline'] as List).whereType<Map>().map(
-                  (item) => Map<String, dynamic>.from(item),
-                ),
+              (item) => Map<String, dynamic>.from(item),
+            ),
           )
         : const <Map<String, dynamic>>[];
+    final lateNotice = _latestLateNotice(timeline);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Servicio del prestador'),
@@ -332,6 +386,10 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
         padding: const EdgeInsets.all(16),
         children: [
           _headerCard(),
+          if (lateNotice != null) ...[
+            const SizedBox(height: 12),
+            _lateNoticeCard(lateNotice),
+          ],
           if (_bool(_request['can_start'])) ...[
             const SizedBox(height: 12),
             _startCodeEntryCard(),
@@ -377,7 +435,9 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
             Text('Actividad: ${_request['category_name'] ?? '—'}'),
             Text('Punto: ${_request['location_text'] ?? '—'}'),
             Text('Hora: ${formatDateTime(_request['requested_start_time'])}'),
-            Text('Duración: ${_request['requested_duration_minutes'] ?? '—'} min'),
+            Text(
+              'Duración: ${_request['requested_duration_minutes'] ?? '—'} min',
+            ),
             if ((_request['notes']?.toString().trim() ?? '').isNotEmpty)
               Text('Notas: ${_request['notes']}'),
           ],
@@ -395,7 +455,10 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Operación del servicio', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Operación del servicio',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Text(encounterStatusLabel(_request['encounter_status'])),
             if (canArrive) ...[
@@ -404,6 +467,12 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
                 onPressed: _loading ? null : _confirmArrival,
                 icon: const Icon(Icons.place),
                 label: const Text('Ya llegué'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _notifyLateArrival,
+                icon: const Icon(Icons.access_time_outlined),
+                label: const Text('Llegaré tarde, ¿me puedes esperar?'),
               ),
               const Text(
                 'Un solo toque confirma la llegada y registra la ubicación demo en el punto.',
@@ -417,11 +486,15 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.check_circle, color: Colors.green),
                 title: Text('Tu llegada ya está confirmada'),
-                subtitle: Text('El campo del código aparecerá arriba cuando el solicitante también llegue.'),
+                subtitle: Text(
+                  'El campo del código aparecerá arriba cuando el solicitante también llegue.',
+                ),
               ),
             ],
             if (_status == 'started')
-              Text('Servicio iniciado: ${formatDateTime(_request['started_at'])}'),
+              Text(
+                'Servicio iniciado: ${formatDateTime(_request['started_at'])}',
+              ),
             if (canFinish) ...[
               const SizedBox(height: 12),
               FilledButton.icon(
@@ -436,6 +509,29 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _lateNoticeCard(Map<String, dynamic> event) {
+    final metadata = event['metadata'] is Map
+        ? Map<String, dynamic>.from(event['metadata'] as Map)
+        : <String, dynamic>{};
+    final eta = metadata['eta_minutes'];
+    final actor = event['actor_username']?.toString() ?? 'La otra persona';
+    return Card(
+      color: Colors.orange.shade50,
+      child: ListTile(
+        leading: const Icon(
+          Icons.access_time_filled_outlined,
+          color: Colors.orange,
+        ),
+        title: Text('$actor informó que llegará tarde'),
+        subtitle: Text(
+          eta == null
+              ? event['description']?.toString() ?? 'Llegará tarde.'
+              : 'Tiempo estimado: $eta minutos.\n${event['description'] ?? ''}',
         ),
       ),
     );
@@ -503,13 +599,19 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Cercanía con el solicitante', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Cercanía con el solicitante',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Text(
-              _request['proximity_label']?.toString() ?? 'Esperando ubicaciones',
+              _request['proximity_label']?.toString() ??
+                  'Esperando ubicaciones',
               style: const TextStyle(fontSize: 17),
             ),
-            Text('Distancia aproximada: ${formatDistance(_request['distance_meters'])}'),
+            Text(
+              'Distancia aproximada: ${formatDistance(_request['distance_meters'])}',
+            ),
             const SizedBox(height: 8),
             const Text(
               'La cercanía es informativa y se actualiza automáticamente al confirmar “Ya llegué”.',
@@ -536,7 +638,10 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Ganancia del servicio', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Ganancia del servicio',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Text('Estado: ${paymentStatusLabel(_payment['status'])}'),
             Text('Valor bruto: ${formatCop(_payment['amount_total'])}'),
@@ -545,6 +650,27 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
               'Valor neto: ${formatCop(_payment['provider_amount'])}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
+            if (_payment['status']?.toString().toLowerCase() ==
+                'release_pending')
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.schedule_send_outlined,
+                  color: Colors.orange,
+                ),
+                title: Text('Transferencia pendiente'),
+                subtitle: Text(
+                  'La actividad ya terminó y el valor está pendiente de transferirse a tu cuenta.',
+                ),
+              ),
+            if (_payment['status']?.toString().toLowerCase() ==
+                'paid_to_provider')
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.check_circle, color: Colors.green),
+                title: Text('Transferencia realizada'),
+                subtitle: Text('La plataforma registró el envío a tu cuenta.'),
+              ),
           ],
         ),
       ),
@@ -557,7 +683,9 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: rating is Map
-            ? Text('Tu calificación al solicitante: ${rating['score']}/5\n${rating['comment'] ?? ''}')
+            ? Text(
+                'Tu calificación al solicitante: ${rating['score']}/5\n${rating['comment'] ?? ''}',
+              )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -587,6 +715,15 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Text(
+              'Ayuda y seguridad',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Usa estas opciones si necesitas reportar una novedad importante o una situación de seguridad.',
+              style: TextStyle(color: Colors.grey),
+            ),
             if (canCancel)
               OutlinedButton.icon(
                 onPressed: _loading ? null : _cancel,
@@ -612,18 +749,208 @@ class _ProviderActiveServicePageState extends State<ProviderActiveServicePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Línea de tiempo', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Línea de tiempo',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             ...timeline.reversed.map(
               (event) => ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.circle, size: 12),
-                title: Text(event['description']?.toString() ?? event['event_type'].toString()),
+                title: Text(
+                  event['description']?.toString() ??
+                      event['event_type'].toString(),
+                ),
                 subtitle: Text(formatDateTime(event['created_at'])),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _LateArrivalData {
+  const _LateArrivalData(this.etaMinutes, this.message);
+
+  final int etaMinutes;
+  final String message;
+}
+
+class _LateArrivalDialog extends StatefulWidget {
+  const _LateArrivalDialog();
+
+  @override
+  State<_LateArrivalDialog> createState() => _LateArrivalDialogState();
+}
+
+class _LateArrivalDialogState extends State<_LateArrivalDialog> {
+  int _eta = 10;
+  final _messageCtrl = TextEditingController();
+  static const _etas = [5, 10, 15, 20, 30, 45, 60];
+
+  @override
+  void dispose() {
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Llegaré tarde'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<int>(
+            initialValue: _eta,
+            decoration: const InputDecoration(
+              labelText: '¿En cuánto tiempo llegarás?',
+            ),
+            items: _etas
+                .map(
+                  (value) => DropdownMenuItem<int>(
+                    value: value,
+                    child: Text('$value minutos'),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value != null) setState(() => _eta = value);
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _messageCtrl,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Mensaje opcional',
+              hintText: 'Ej. Voy en camino pero hay tráfico.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Volver'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            _LateArrivalData(_eta, _messageCtrl.text.trim()),
+          ),
+          child: const Text('Avisar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _RiskReportData {
+  const _RiskReportData(this.level, this.reason, this.details);
+
+  final String level;
+  final String reason;
+  final String details;
+}
+
+class _RiskReportDialog extends StatefulWidget {
+  const _RiskReportDialog({required this.isProvider});
+
+  final bool isProvider;
+
+  @override
+  State<_RiskReportDialog> createState() => _RiskReportDialogState();
+}
+
+class _RiskReportDialogState extends State<_RiskReportDialog> {
+  String _level = 'media';
+  String _reason = 'conducta_inapropiada';
+  final _detailsCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _detailsCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reasons = const {
+      'conducta_inapropiada': 'Conducta inapropiada',
+      'sitio_inseguro': 'Sitio inseguro',
+      'presion_o_amenaza': 'Presión o amenaza',
+      'incumplimiento': 'Incumplimiento del acuerdo',
+      'otro': 'Otro',
+    };
+    return AlertDialog(
+      title: const Text('Reportar un caso de riesgo'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _level,
+              decoration: const InputDecoration(labelText: 'Nivel de urgencia'),
+              items: const [
+                DropdownMenuItem(value: 'baja', child: Text('Baja')),
+                DropdownMenuItem(value: 'media', child: Text('Media')),
+                DropdownMenuItem(value: 'alta', child: Text('Alta')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _level = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _reason,
+              decoration: const InputDecoration(labelText: 'Motivo principal'),
+              items: reasons.entries
+                  .map(
+                    (entry) => DropdownMenuItem<String>(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _reason = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _detailsCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Detalle',
+                hintText: 'Describe brevemente lo ocurrido.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Importante: este reporte deja trazabilidad en la plataforma. En una emergencia real debes comunicarte de inmediato con la línea local de emergencias.',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Volver'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            _RiskReportData(_level, _reason, _detailsCtrl.text.trim()),
+          ),
+          child: const Text('Enviar reporte'),
+        ),
+      ],
     );
   }
 }

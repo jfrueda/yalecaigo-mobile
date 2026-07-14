@@ -40,7 +40,8 @@ class AuthInterceptor extends Interceptor {
     ErrorInterceptorHandler handler,
   ) async {
     final request = err.requestOptions;
-    final shouldRefresh = err.response?.statusCode == 401 &&
+    final shouldRefresh =
+        err.response?.statusCode == 401 &&
         !_isPublicAuthPath(request.path) &&
         request.extra['_jwtRetried'] != true;
 

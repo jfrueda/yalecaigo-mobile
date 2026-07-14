@@ -55,7 +55,9 @@ class _HomePageState extends State<HomePage> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _load() async {
@@ -92,7 +94,9 @@ class _HomePageState extends State<HomePage> {
     final request = _activeRequest;
     if (request == null) return;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => RequestDetailPage(request: request)),
+      MaterialPageRoute<void>(
+        builder: (_) => RequestDetailPage(request: request),
+      ),
     );
     await _load();
   }
@@ -191,10 +195,15 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Text(
                     'Hola, ${_me?['username'] ?? 'usuario'}',
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  const Text('Solicita compañía para una actividad o diligencia.'),
+                  const Text(
+                    'Solicita compañía para una actividad o diligencia.',
+                  ),
                   const SizedBox(height: 20),
                   if (_error != null)
                     Card(
@@ -287,7 +296,10 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                   child: Text(
                     serviceStatusLabel(status),
-                    style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -306,13 +318,17 @@ class _HomePageState extends State<HomePage> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.hourglass_top, color: Colors.orange),
                 title: Text('Ya confirmaste la finalización'),
-                subtitle: Text('Estamos esperando la confirmación del prestador.'),
+                subtitle: Text(
+                  'Estamos esperando la confirmación del prestador.',
+                ),
               ),
             ],
             if (canFinish) ...[
               const SizedBox(height: 12),
               FilledButton.icon(
-                onPressed: _actionLoading ? null : () => _finishAndRate(request),
+                onPressed: _actionLoading
+                    ? null
+                    : () => _finishAndRate(request),
                 icon: const Icon(Icons.flag),
                 label: const Text('Finalizar y calificar'),
               ),

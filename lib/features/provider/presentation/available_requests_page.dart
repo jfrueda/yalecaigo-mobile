@@ -53,7 +53,9 @@ class _AvailableRequestsPageState extends State<AvailableRequestsPage> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _loadDashboard() async {
@@ -62,7 +64,9 @@ class _AvailableRequestsPageState extends State<AvailableRequestsPage> {
       _error = null;
     });
     try {
-      final active = await _queryService.getActiveRequest(fallbackToList: false);
+      final active = await _queryService.getActiveRequest(
+        fallbackToList: false,
+      );
       final available = active == null
           ? await _queryService.listAvailableRequests()
           : const <Map<String, dynamic>>[];
@@ -169,7 +173,9 @@ class _AvailableRequestsPageState extends State<AvailableRequestsPage> {
             tooltip: 'Histórico',
             onPressed: () async {
               await Navigator.of(context).push<void>(
-                MaterialPageRoute<void>(builder: (_) => const ProviderHistoryPage()),
+                MaterialPageRoute<void>(
+                  builder: (_) => const ProviderHistoryPage(),
+                ),
               );
               await _loadDashboard();
             },
@@ -192,44 +198,49 @@ class _AvailableRequestsPageState extends State<AvailableRequestsPage> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? ListView(
-                    children: [
-                      const SizedBox(height: 180),
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(_error!, textAlign: TextAlign.center),
-                        ),
+            ? ListView(
+                children: [
+                  const SizedBox(height: 180),
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(_error!, textAlign: TextAlign.center),
+                    ),
+                  ),
+                ],
+              )
+            : _activeRequest != null
+            ? ListView(
+                padding: const EdgeInsets.all(16),
+                children: [_activeCard(_activeRequest!)],
+              )
+            : _requests.isEmpty
+            ? ListView(
+                children: const [
+                  SizedBox(height: 160),
+                  Icon(Icons.search_off, size: 64, color: Colors.grey),
+                  SizedBox(height: 12),
+                  Center(
+                    child: Text('No hay solicitudes pagadas disponibles.'),
+                  ),
+                ],
+              )
+            : ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Text(
+                      'Solicitudes cercanas disponibles',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
-                    ],
-                  )
-                : _activeRequest != null
-                    ? ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [_activeCard(_activeRequest!)],
-                      )
-                    : _requests.isEmpty
-                        ? ListView(
-                            children: const [
-                              SizedBox(height: 160),
-                              Icon(Icons.search_off, size: 64, color: Colors.grey),
-                              SizedBox(height: 12),
-                              Center(child: Text('No hay solicitudes pagadas disponibles.')),
-                            ],
-                          )
-                        : ListView(
-                            padding: const EdgeInsets.all(12),
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.all(6),
-                                child: Text(
-                                  'Solicitudes cercanas disponibles',
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              ..._requests.map(_requestCard),
-                            ],
-                          ),
+                    ),
+                  ),
+                  ..._requests.map(_requestCard),
+                ],
+              ),
       ),
     );
   }
@@ -262,13 +273,17 @@ class _AvailableRequestsPageState extends State<AvailableRequestsPage> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.hourglass_top, color: Colors.orange),
                 title: Text('Ya confirmaste la finalización'),
-                subtitle: Text('Estamos esperando la confirmación del solicitante.'),
+                subtitle: Text(
+                  'Estamos esperando la confirmación del solicitante.',
+                ),
               ),
             ],
             if (canFinish) ...[
               const SizedBox(height: 14),
               FilledButton.icon(
-                onPressed: _actionLoading ? null : () => _finishAndRate(request),
+                onPressed: _actionLoading
+                    ? null
+                    : () => _finishAndRate(request),
                 icon: const Icon(Icons.flag),
                 label: const Text('Finalizar y calificar'),
               ),
@@ -290,7 +305,8 @@ class _AvailableRequestsPageState extends State<AvailableRequestsPage> {
               onPressed: () async {
                 await Navigator.of(context).push<void>(
                   MaterialPageRoute<void>(
-                    builder: (_) => ProviderActiveServicePage(serviceRequest: request),
+                    builder: (_) =>
+                        ProviderActiveServicePage(serviceRequest: request),
                   ),
                 );
                 await _loadDashboard();
@@ -318,7 +334,9 @@ class _AvailableRequestsPageState extends State<AvailableRequestsPage> {
           children: [
             Text(request['location_text']?.toString() ?? 'Sin ubicación'),
             Text('Inicio: ${formatDateTime(request['requested_start_time'])}'),
-            Text('Duración: ${request['requested_duration_minutes'] ?? '—'} min'),
+            Text(
+              'Duración: ${request['requested_duration_minutes'] ?? '—'} min',
+            ),
             Text(
               'Ganancia estimada: ${formatCop(payment['provider_amount'])}',
               style: const TextStyle(fontWeight: FontWeight.bold),
