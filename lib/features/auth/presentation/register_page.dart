@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/brand_logo.dart';
+
 import '../../../core/navigation/role_gate_page.dart';
 import '../data/auth_service.dart';
 
@@ -103,7 +105,7 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Crear cuenta')),
+      appBar: AppBar(title: const BrandAppBarTitle(title: 'Crear cuenta')),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -259,6 +261,8 @@ class _RegisterPageState extends State<RegisterPage> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
+              const SizedBox(height: 28),
+              const OpenticAttribution(imageWidth: 102, compact: true),
             ],
           ),
         ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/app_components.dart';
+import '../../../shared/widgets/brand_logo.dart';
 
 class AccountOverviewPage extends StatelessWidget {
   const AccountOverviewPage({
@@ -142,6 +143,10 @@ class AccountOverviewPage extends StatelessWidget {
           icon: const Icon(Icons.logout),
           label: const Text('Cerrar sesión'),
         ),
+        const SizedBox(height: AppSpacing.xl),
+        const Divider(),
+        const SizedBox(height: AppSpacing.md),
+        const Center(child: OpenticAttribution(imageWidth: 108, compact: true)),
       ],
     );
   }

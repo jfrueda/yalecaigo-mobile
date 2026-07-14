@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/brand_logo.dart';
+
 import '../data/auth_service.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
@@ -111,7 +113,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Recuperar contraseña')),
+      appBar: AppBar(
+        title: const BrandAppBarTitle(title: 'Recuperar contraseña'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -192,6 +196,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ],
+          const SizedBox(height: 28),
+          const OpenticAttribution(imageWidth: 102, compact: true),
         ],
       ),
     );

@@ -5,6 +5,7 @@ import 'core/network/token_storage.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/login_page.dart';
+import 'shared/widgets/brand_logo.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,31 +47,52 @@ class _LaunchPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: 34,
-              backgroundColor: AppColors.primary,
-              child: Icon(Icons.route_outlined, color: Colors.white, size: 34),
-            ),
-            SizedBox(height: 18),
-            Text(
-              'YaLeCaigo',
-              style: TextStyle(
-                fontSize: 25,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primaryDark,
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppColors.surface,
+              AppColors.background,
+              AppColors.surfaceSoft,
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              BrandMark(size: 112, showSurface: true, padding: 12),
+              SizedBox(height: 21),
+              Text(
+                'YaLeCaigo',
+                style: TextStyle(
+                  color: AppColors.primaryDark,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.6,
+                ),
               ),
-            ),
-            SizedBox(height: 16),
-            SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            ),
-          ],
+              SizedBox(height: 8),
+              Text(
+                'Acompañamiento seguro para tu día a día',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: 21),
+              OpenticAttribution(imageWidth: 116, compact: true),
+              SizedBox(height: 34),
+              SizedBox(
+                width: 30,
+                height: 30,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+            ],
+          ),
         ),
       ),
     );

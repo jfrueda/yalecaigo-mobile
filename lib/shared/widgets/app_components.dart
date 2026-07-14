@@ -100,15 +100,11 @@ class AppHeroActionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryMedium],
-        ),
+        gradient: AppColors.brandGradient,
         borderRadius: BorderRadius.circular(22),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x26173F4D),
+            color: Color(0x26073F43),
             blurRadius: 22,
             offset: Offset(0, 10),
           ),

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/navigation/role_gate_page.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/widgets/brand_logo.dart';
 import '../data/auth_service.dart';
 import 'forgot_password_page.dart';
 import 'register_page.dart';
@@ -21,6 +24,7 @@ class _LoginPageState extends State<LoginPage> {
   final _auth = AuthService();
 
   bool _loading = false;
+  bool _obscurePassword = true;
   String? _error;
 
   @override
@@ -43,7 +47,9 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       await _auth.login(_userCtrl.text, _passCtrl.text);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute<void>(builder: (_) => const RoleGatePage()),
@@ -58,7 +64,9 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final status = error.response?.statusCode;
 
       setState(() {
@@ -78,14 +86,18 @@ class _LoginPageState extends State<LoginPage> {
         }
       });
     } on FormatException catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _error = error.message);
     } catch (error, stackTrace) {
       if (kDebugMode) {
         debugPrint('[LOGIN] Error no controlado: $error');
         debugPrintStack(stackTrace: stackTrace);
       }
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _error = 'No fue posible iniciar sesión.');
     } finally {
       if (mounted) {
@@ -97,73 +109,169 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Acompañante')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpacing.page),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 460),
               child: AutofillGroup(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    const Align(
+                      alignment: Alignment.center,
+                      child: BrandMark(
+                        size: 116,
+                        showSurface: true,
+                        padding: 12,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    const Align(
+                      alignment: Alignment.center,
+                      child: BrandLockup(markSize: 0),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Iniciar sesión',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: _userCtrl,
-                      autofillHints: const [AutofillHints.username],
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Usuario',
-                        border: OutlineInputBorder(),
+                      'Acompañamiento seguro para tu día a día',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passCtrl,
-                      autofillHints: const [AutofillHints.password],
-                      obscureText: true,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) {
-                        if (!_loading) _login();
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Contraseña',
-                        border: OutlineInputBorder(),
+                    const SizedBox(height: AppSpacing.xl),
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(color: AppColors.border),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x18073F43),
+                            blurRadius: 24,
+                            offset: Offset(0, 10),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: _loading ? null : _login,
-                        child: _loading
-                            ? const SizedBox.square(
-                                dimension: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Entrar'),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _loading
-                          ? null
-                          : () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const ForgotPasswordPage(),
-                                ),
-                              );
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Iniciar sesión',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Ingresa para coordinar tu próxima actividad.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          TextField(
+                            controller: _userCtrl,
+                            autofillHints: const [AutofillHints.username],
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Usuario',
+                              prefixIcon: Icon(Icons.person_outline_rounded),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          TextField(
+                            controller: _passCtrl,
+                            autofillHints: const [AutofillHints.password],
+                            obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) {
+                              if (!_loading) {
+                                _login();
+                              }
                             },
-                      child: const Text('Olvidé mi contraseña'),
+                            decoration: InputDecoration(
+                              labelText: 'Contraseña',
+                              prefixIcon: const Icon(
+                                Icons.lock_outline_rounded,
+                              ),
+                              suffixIcon: IconButton(
+                                tooltip: _obscurePassword
+                                    ? 'Mostrar contraseña'
+                                    : 'Ocultar contraseña',
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (_error != null) ...[
+                            const SizedBox(height: AppSpacing.md),
+                            Container(
+                              padding: const EdgeInsets.all(AppSpacing.md),
+                              decoration: BoxDecoration(
+                                color: AppColors.coralSoft,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline_rounded,
+                                    color: AppColors.danger,
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  Expanded(
+                                    child: Text(
+                                      _error!,
+                                      style: const TextStyle(
+                                        color: AppColors.danger,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.lg),
+                          FilledButton.icon(
+                            onPressed: _loading ? null : _login,
+                            icon: _loading
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.disabledText,
+                                    ),
+                                  )
+                                : const Icon(Icons.arrow_forward_rounded),
+                            label: Text(_loading ? 'Ingresando…' : 'Entrar'),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          TextButton(
+                            onPressed: _loading
+                                ? null
+                                : () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) =>
+                                            const ForgotPasswordPage(),
+                                      ),
+                                    );
+                                  },
+                            child: const Text('Olvidé mi contraseña'),
+                          ),
+                        ],
+                      ),
                     ),
-                    TextButton(
+                    const SizedBox(height: AppSpacing.lg),
+                    OutlinedButton.icon(
                       onPressed: _loading
                           ? null
                           : () {
@@ -173,18 +281,31 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                               );
                             },
-                      child: const Text('Crear una cuenta'),
+                      icon: const Icon(Icons.person_add_alt_1_rounded),
+                      label: const Text('Crear una cuenta'),
                     ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+                    const SizedBox(height: AppSpacing.md),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.verified_user_outlined,
+                          size: 17,
+                          color: AppColors.primary,
                         ),
-                      ),
-                    ],
+                        SizedBox(width: 6),
+                        Text(
+                          'Confianza, cercanía y seguridad',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    const OpenticAttribution(imageWidth: 108, compact: true),
                   ],
                 ),
               ),

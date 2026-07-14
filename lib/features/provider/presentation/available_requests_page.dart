@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/service_display.dart';
 import '../../../shared/widgets/app_components.dart';
+import '../../../shared/widgets/brand_logo.dart';
 import '../../../shared/widgets/service_rating_dialog.dart';
 import '../../account/presentation/account_overview_page.dart';
 import '../../auth/data/me_service.dart';
@@ -234,7 +235,10 @@ class _AvailableRequestsPageState extends State<AvailableRequestsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_title),
+        title: BrandAppBarTitle(
+          title: _title,
+          showBrandName: _selectedIndex == 0,
+        ),
         actions: [
           if (_selectedIndex == 0)
             IconButton(

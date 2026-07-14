@@ -9,31 +9,31 @@ abstract final class AppTheme {
       brightness: Brightness.light,
       primary: AppColors.primary,
       onPrimary: Colors.white,
-      primaryContainer: Color(0xFFDCEFF2),
+      primaryContainer: AppColors.selectionSoft,
       onPrimaryContainer: AppColors.primaryDark,
       secondary: AppColors.secondary,
       onSecondary: Colors.white,
-      secondaryContainer: Color(0xFFDDF2F0),
+      secondaryContainer: Color(0xFFDDF5F2),
       onSecondaryContainer: AppColors.primaryDark,
-      tertiary: AppColors.warmAccent,
-      onTertiary: AppColors.textPrimary,
-      tertiaryContainer: Color(0xFFF9E7DD),
-      onTertiaryContainer: AppColors.textPrimary,
+      tertiary: AppColors.coral,
+      onTertiary: Colors.white,
+      tertiaryContainer: AppColors.coralSoft,
+      onTertiaryContainer: Color(0xFF6A241C),
       error: AppColors.danger,
       onError: Colors.white,
-      errorContainer: Color(0xFFF8DFDF),
-      onErrorContainer: Color(0xFF6D2222),
+      errorContainer: Color(0xFFFFE2DF),
+      onErrorContainer: Color(0xFF6E211B),
       surface: AppColors.surface,
       onSurface: AppColors.textPrimary,
       surfaceContainerHighest: AppColors.surfaceSoft,
       onSurfaceVariant: AppColors.textSecondary,
       outline: AppColors.border,
-      outlineVariant: Color(0xFFE8EEEE),
-      shadow: Color(0x220F2E39),
+      outlineVariant: Color(0xFFE5EEEE),
+      shadow: Color(0x22073F43),
       scrim: Color(0x88000000),
       inverseSurface: AppColors.primaryDark,
       onInverseSurface: Colors.white,
-      inversePrimary: Color(0xFF9FD1DB),
+      inversePrimary: Color(0xFF8DDBD6),
     );
 
     final base = ThemeData(
@@ -41,7 +41,6 @@ abstract final class AppTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: AppColors.background,
       visualDensity: VisualDensity.standard,
-      fontFamily: null,
     );
 
     return base.copyWith(
@@ -145,6 +144,10 @@ abstract final class AppTheme {
           textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
         ),
       ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppColors.coral,
+        foregroundColor: Colors.white,
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
@@ -152,6 +155,8 @@ abstract final class AppTheme {
           horizontal: 16,
           vertical: 15,
         ),
+        prefixIconColor: AppColors.primary,
+        suffixIconColor: AppColors.textSecondary,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.border),
@@ -162,10 +167,7 @@ abstract final class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(
-            color: AppColors.primaryMedium,
-            width: 1.6,
-          ),
+          borderSide: const BorderSide(color: AppColors.secondary, width: 1.8),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -189,7 +191,7 @@ abstract final class AppTheme {
         height: 70,
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: AppColors.tint(AppColors.secondary, 0.20),
+        indicatorColor: AppColors.selectionSoft,
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
             fontSize: 12,
@@ -208,6 +210,9 @@ abstract final class AppTheme {
                 : AppColors.textSecondary,
           ),
         ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.secondary,
       ),
       snackBarTheme: const SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
