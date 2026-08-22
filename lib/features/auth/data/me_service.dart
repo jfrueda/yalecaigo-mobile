@@ -7,10 +7,10 @@ class MeService {
   Future<Map<String, dynamic>> getMe() async {
     Response<dynamic> response;
     try {
-      response = await ApiClient.dio.get(Endpoints.me);
+      response = await ApiClient.dio.get(Endpoints.authMe);
     } on DioException catch (error) {
       if (error.response?.statusCode != 404) rethrow;
-      response = await ApiClient.dio.get(Endpoints.authMe);
+      response = await ApiClient.dio.get(Endpoints.me);
     }
 
     final data = response.data;

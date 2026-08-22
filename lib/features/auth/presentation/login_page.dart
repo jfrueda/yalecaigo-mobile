@@ -1,15 +1,15 @@
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/navigation/role_gate_page.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_spacing.dart';
-import '../../../shared/widgets/brand_logo.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/app_brand.dart';
 import '../data/auth_service.dart';
-import 'forgot_password_page.dart';
-import 'register_page.dart';
+import '../data/social_auth_service.dart';
+import 'auth_error.dart';
+import 'password_reset_request_page.dart';
+import 'role_selection_page.dart';
+import 'social_complete_registration_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,91 +19,142 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _userCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  final _auth = AuthService();
+  final TextEditingController _identifier = TextEditingController();
+  final TextEditingController _password = TextEditingController();
+  final AuthService _auth = AuthService();
+  final SocialAuthService _social = SocialAuthService();
 
   bool _loading = false;
-  bool _obscurePassword = true;
+  bool _obscure = true;
   String? _error;
+  String? _pendingProvider;
+  String? _pendingProviderToken;
 
   @override
   void dispose() {
-    _userCtrl.dispose();
-    _passCtrl.dispose();
+    _identifier.dispose();
+    _password.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
-    FocusScope.of(context).unfocus();
+    await _run(() async {
+      await _auth.login(_identifier.text, _password.text);
+      final provider = _pendingProvider;
+      final token = _pendingProviderToken;
+      if (provider != null && token != null) {
+        await _auth.linkSocialIdentity(provider: provider, token: token);
+        _pendingProvider = null;
+        _pendingProviderToken = null;
+      }
+    });
+  }
+
+  Future<void> _socialLogin(String provider) async {
+    if (provider == 'google' && !AppConfig.googleAuthEnabled) {
+      _notConfigured('Google');
+      return;
+    }
+    if (provider == 'facebook' && !AppConfig.facebookAuthEnabled) {
+      _notConfigured('Facebook');
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
     });
 
-    if (kDebugMode) {
-      debugPrint('[LOGIN] Backend: ${AppConfig.normalizedBaseUrl}');
-    }
-
     try {
-      await _auth.login(_userCtrl.text, _passCtrl.text);
-      if (!mounted) {
+      final token = provider == 'google'
+          ? await _social.signInWithGoogle()
+          : await _social.signInWithFacebook();
+      final result = await _auth.socialLogin(provider: provider, token: token);
+      if (!mounted) return;
+
+      if (result.result == 'authenticated') {
+        _openHome();
         return;
       }
 
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const RoleGatePage()),
-        (_) => false,
-      );
-    } on DioException catch (error) {
-      if (kDebugMode) {
-        debugPrint(
-          '[LOGIN] DioException type=${error.type} '
-          'status=${error.response?.statusCode ?? '-'} '
-          'message=${error.message}',
+      if (result.result == 'registration_required' &&
+          result.registrationToken != null) {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => SocialCompleteRegistrationPage(
+              registrationToken: result.registrationToken!,
+              provider: provider == 'google' ? 'Google' : 'Facebook',
+              profile: result.profile,
+            ),
+          ),
         );
-      }
-
-      if (!mounted) {
         return;
       }
-      final status = error.response?.statusCode;
+
+      if (result.result == 'link_required') {
+        _pendingProvider = provider;
+        _pendingProviderToken = token;
+        _identifier.text = result.data['email_hint']?.toString() ?? '';
+        setState(() {
+          _error =
+              'Esta cuenta ya existe. Escribe su contraseña para vincular '
+              '${provider == 'google' ? 'Google' : 'Facebook'} de forma segura.';
+        });
+        return;
+      }
 
       setState(() {
-        if (status == 400 || status == 401) {
-          _error = 'Usuario o contraseña inválidos.';
-        } else if (error.type == DioExceptionType.connectionError ||
-            error.type == DioExceptionType.connectionTimeout ||
-            error.type == DioExceptionType.sendTimeout ||
-            error.type == DioExceptionType.receiveTimeout) {
-          _error =
-              'No fue posible conectar con el backend en '
-              '${AppConfig.normalizedBaseUrl}.';
-        } else {
-          _error =
-              'Error de conexión con la API '
-              '(HTTP ${status ?? '-'}, ${error.type.name}).';
-        }
+        _error =
+            result.data['detail']?.toString() ??
+            'No fue posible completar el ingreso social.';
       });
-    } on FormatException catch (error) {
-      if (!mounted) {
-        return;
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = readableAuthError(error));
       }
-      setState(() => _error = error.message);
-    } catch (error, stackTrace) {
-      if (kDebugMode) {
-        debugPrint('[LOGIN] Error no controlado: $error');
-        debugPrintStack(stackTrace: stackTrace);
-      }
-      if (!mounted) {
-        return;
-      }
-      setState(() => _error = 'No fue posible iniciar sesión.');
     } finally {
       if (mounted) {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _run(Future<void> Function() action) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await action();
+      if (mounted) {
+        _openHome();
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = readableAuthError(error));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  void _openHome() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const RoleGatePage()),
+      (_) => false,
+    );
+  }
+
+  void _notConfigured(String name) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$name estará disponible cuando se configuren las credenciales del proyecto.',
+        ),
+      ),
+    );
   }
 
   @override
@@ -112,200 +163,177 @@ class _LoginPageState extends State<LoginPage> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.page),
+            padding: const EdgeInsets.fromLTRB(22, 24, 22, 28),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 460),
               child: AutofillGroup(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Align(
-                      alignment: Alignment.center,
-                      child: BrandMark(
-                        size: 116,
-                        showSurface: true,
-                        padding: 12,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    const Align(
-                      alignment: Alignment.center,
-                      child: BrandLockup(markSize: 0),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      'Acompañamiento seguro para tu día a día',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    Container(
-                      padding: const EdgeInsets.all(AppSpacing.lg),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(color: AppColors.border),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x18073F43),
-                            blurRadius: 24,
-                            offset: Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'Iniciar sesión',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Ingresa para coordinar tu próxima actividad.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-                          TextField(
-                            controller: _userCtrl,
-                            autofillHints: const [AutofillHints.username],
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Usuario',
-                              prefixIcon: Icon(Icons.person_outline_rounded),
+                    const AppBrandHeader(),
+                    const SizedBox(height: 28),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Bienvenido',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(
+                                    color: AppColors.tealDark,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                             ),
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          TextField(
-                            controller: _passCtrl,
-                            autofillHints: const [AutofillHints.password],
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) {
-                              if (!_loading) {
-                                _login();
-                              }
-                            },
-                            decoration: InputDecoration(
-                              labelText: 'Contraseña',
-                              prefixIcon: const Icon(
-                                Icons.lock_outline_rounded,
+                            const SizedBox(height: 5),
+                            const Text(
+                              'Ingresa para continuar con tus actividades.',
+                            ),
+                            const SizedBox(height: 18),
+                            TextField(
+                              controller: _identifier,
+                              autofillHints: const [
+                                AutofillHints.username,
+                                AutofillHints.email,
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'Correo, celular o usuario',
+                                prefixIcon: Icon(Icons.person_outline),
                               ),
-                              suffixIcon: IconButton(
-                                tooltip: _obscurePassword
-                                    ? 'Mostrar contraseña'
-                                    : 'Ocultar contraseña',
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _password,
+                              autofillHints: const [AutofillHints.password],
+                              obscureText: _obscure,
+                              onSubmitted: (_) {
+                                if (!_loading) {
+                                  _login();
+                                }
+                              },
+                              decoration: InputDecoration(
+                                labelText: 'Contraseña',
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                suffixIcon: IconButton(
+                                  onPressed: () {
+                                    setState(() => _obscure = !_obscure);
+                                  },
+                                  icon: Icon(
+                                    _obscure
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          if (_error != null) ...[
-                            const SizedBox(height: AppSpacing.md),
-                            Container(
-                              padding: const EdgeInsets.all(AppSpacing.md),
-                              decoration: BoxDecoration(
-                                color: AppColors.coralSoft,
-                                borderRadius: BorderRadius.circular(12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                const PasswordResetRequestPage(),
+                                          ),
+                                        );
+                                      },
+                                child: const Text('¿Olvidaste tu contraseña?'),
                               ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(
-                                    Icons.error_outline_rounded,
-                                    color: AppColors.danger,
-                                  ),
-                                  const SizedBox(width: AppSpacing.sm),
-                                  Expanded(
-                                    child: Text(
-                                      _error!,
-                                      style: const TextStyle(
-                                        color: AppColors.danger,
-                                        fontWeight: FontWeight.w600,
+                            ),
+                            FilledButton(
+                              onPressed: _loading ? null : _login,
+                              child: _loading
+                                  ? const SizedBox.square(
+                                      dimension: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
                                       ),
+                                    )
+                                  : const Text('Ingresar'),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 18),
+                              child: Row(
+                                children: [
+                                  Expanded(child: Divider()),
+                                  Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 12,
                                     ),
+                                    child: Text('o continúa con'),
                                   ),
+                                  Expanded(child: Divider()),
                                 ],
                               ),
                             ),
+                            OutlinedButton.icon(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _socialLogin('google'),
+                              icon: const Text(
+                                'G',
+                                style: TextStyle(
+                                  color: AppColors.coral,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              label: const Text('Continuar con Google'),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _socialLogin('facebook'),
+                              icon: const Icon(Icons.facebook),
+                              label: const Text('Continuar con Facebook'),
+                            ),
+                            const SizedBox(height: 10),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute<void>(
+                                          builder: (_) =>
+                                              const RoleSelectionPage(),
+                                        ),
+                                      );
+                                    },
+                              child: const Text(
+                                '¿No tienes cuenta? Crear cuenta',
+                              ),
+                            ),
+                            if (_error != null) ...[
+                              const SizedBox(height: 10),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.coral.withValues(
+                                    alpha: 0.10,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  _error!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: AppColors.coral,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
-                          const SizedBox(height: AppSpacing.lg),
-                          FilledButton.icon(
-                            onPressed: _loading ? null : _login,
-                            icon: _loading
-                                ? const SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColors.disabledText,
-                                    ),
-                                  )
-                                : const Icon(Icons.arrow_forward_rounded),
-                            label: Text(_loading ? 'Ingresando…' : 'Entrar'),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          TextButton(
-                            onPressed: _loading
-                                ? null
-                                : () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) =>
-                                            const ForgotPasswordPage(),
-                                      ),
-                                    );
-                                  },
-                            child: const Text('Olvidé mi contraseña'),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.lg),
-                    OutlinedButton.icon(
-                      onPressed: _loading
-                          ? null
-                          : () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const RegisterPage(),
-                                ),
-                              );
-                            },
-                      icon: const Icon(Icons.person_add_alt_1_rounded),
-                      label: const Text('Crear una cuenta'),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.verified_user_outlined,
-                          size: 17,
-                          color: AppColors.primary,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Confianza, cercanía y seguridad',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    const OpenticAttribution(imageWidth: 108, compact: true),
+                    const SizedBox(height: 26),
+                    const OpenticFooter(),
                   ],
                 ),
               ),

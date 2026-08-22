@@ -1,13 +1,12 @@
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../features/auth/data/auth_service.dart';
 import '../../features/auth/data/me_service.dart';
+import '../../features/auth/presentation/email_verification_page.dart';
 import '../../features/auth/presentation/login_page.dart';
-import '../../features/home/presentation/home_page.dart';
-import '../../features/provider/presentation/available_requests_page.dart';
-import '../config/app_config.dart';
-import '../network/token_storage.dart';
+import '../../features/provider/presentation/provider_enablement_page.dart';
+import 'client_shell.dart';
+import 'provider_shell.dart';
 
 class RoleGatePage extends StatefulWidget {
   const RoleGatePage({super.key});
@@ -17,61 +16,39 @@ class RoleGatePage extends StatefulWidget {
 }
 
 class _RoleGatePageState extends State<RoleGatePage> {
-  final _meService = MeService();
-
+  final MeService _me = MeService();
+  final AuthService _auth = AuthService();
   bool _loading = true;
   String? _error;
-  String? _role;
-  String? _status;
-  String? _username;
-  bool _verified = false;
+  Map<String, dynamic> _profile = const {};
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    _load();
   }
 
-  Future<void> _loadProfile() async {
-    if (mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
-
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final profile = await _meService.getMe();
-      if (!mounted) return;
-
-      final status = profile['status']?.toString().toUpperCase();
-      setState(() {
-        _username = profile['username']?.toString();
-        _role = profile['role']?.toString().toLowerCase();
-        _status = status;
-        _verified = profile['is_verified'] == true || status == 'VERIFIED';
-        _loading = false;
-      });
-    } on DioException catch (error) {
-      if (!mounted) return;
-      final statusCode = error.response?.statusCode;
-      setState(() {
-        _error = statusCode == 401
-            ? 'La sesión venció o el token no es válido.'
-            : 'No se pudo consultar el perfil en el backend.';
-        _loading = false;
-      });
+      final value = await _me.getMe();
+      if (mounted) setState(() => _profile = Map<String, dynamic>.from(value));
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'La respuesta del perfil no tiene el formato esperado.';
-        _loading = false;
-      });
+      if (mounted)
+        setState(
+          () => _error =
+              'No pudimos abrir tu cuenta. Revisa tu conexión e intenta nuevamente.',
+        );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _logout() async {
-    await TokenStorage.clear();
+    await _auth.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginPage()),
@@ -79,137 +56,52 @@ class _RoleGatePageState extends State<RoleGatePage> {
     );
   }
 
-  String get _debugDetail =>
-      'API: ${AppConfig.normalizedBaseUrl}\n'
-      'Usuario: ${_username ?? '-'}\n'
-      'Rol: ${_role ?? '-'}\n'
-      'Estado: ${_status ?? '-'}';
-
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
     if (_error != null) {
-      return _MessagePage(
-        title: 'No fue posible iniciar',
-        message: _error!,
-        detail: kDebugMode ? _debugDetail : null,
-        primaryLabel: 'Reintentar',
-        onPrimary: _loadProfile,
-        onLogout: _logout,
-      );
-    }
-
-    if (_status == 'SUSPENDED') {
-      return _MessagePage(
-        title: 'Cuenta suspendida',
-        message:
-            'La cuenta está suspendida. Debe ser reactivada desde el backend.',
-        detail: kDebugMode ? _debugDetail : null,
-        primaryLabel: 'Volver a consultar',
-        onPrimary: _loadProfile,
-        onLogout: _logout,
-      );
-    }
-
-    // Los clientes pueden crear solicitudes mientras su verificación documental
-    // se completa. Los prestadores sí deben estar verificados antes de aceptar.
-    if (_role == 'provider' && !_verified) {
-      return _MessagePage(
-        title: 'Prestador pendiente de verificación',
-        message:
-            'El backend reconoció la cuenta de prestador, pero todavía no está '
-            'habilitada para aceptar servicios.',
-        detail: kDebugMode ? _debugDetail : null,
-        primaryLabel: 'Volver a consultar',
-        onPrimary: _loadProfile,
-        onLogout: _logout,
-      );
-    }
-
-    switch (_role) {
-      case 'client':
-        return const HomePage();
-      case 'provider':
-        return const AvailableRequestsPage();
-      case 'admin':
-        return _MessagePage(
-          title: 'Administrador',
-          message: 'El panel administrativo móvil aún no está implementado.',
-          detail: kDebugMode ? _debugDetail : null,
-          primaryLabel: 'Actualizar perfil',
-          onPrimary: _loadProfile,
-          onLogout: _logout,
-        );
-      default:
-        return _MessagePage(
-          title: 'Rol no reconocido',
-          message: 'El backend devolvió el rol "${_role ?? 'vacío'}".',
-          detail: kDebugMode ? _debugDetail : null,
-          primaryLabel: 'Reintentar',
-          onPrimary: _loadProfile,
-          onLogout: _logout,
-        );
-    }
-  }
-}
-
-class _MessagePage extends StatelessWidget {
-  const _MessagePage({
-    required this.title,
-    required this.message,
-    required this.primaryLabel,
-    required this.onPrimary,
-    required this.onLogout,
-    this.detail,
-  });
-
-  final String title;
-  final String message;
-  final String primaryLabel;
-  final String? detail;
-  final VoidCallback onPrimary;
-  final VoidCallback onLogout;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        actions: [
-          IconButton(
-            tooltip: 'Cerrar sesión',
-            onPressed: onLogout,
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
+      return Scaffold(
+        appBar: AppBar(
+          actions: [
+            IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
+          ],
+        ),
+        body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(message, textAlign: TextAlign.center),
-                if (detail != null) ...[
-                  const SizedBox(height: 16),
-                  SelectableText(
-                    detail!,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-                const SizedBox(height: 24),
-                FilledButton(onPressed: onPrimary, child: Text(primaryLabel)),
+                Text(_error!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton(onPressed: _load, child: const Text('Reintentar')),
               ],
             ),
           ),
         ),
-      ),
-    );
+      );
+    }
+
+    final emailStatus = _profile['email_verification_status']
+        ?.toString()
+        .toUpperCase();
+    if (emailStatus != 'VERIFIED') return const EmailVerificationPage();
+
+    final modes = _profile['modes'] is Map
+        ? Map<String, dynamic>.from(_profile['modes'] as Map)
+        : <String, dynamic>{};
+    final activeMode =
+        (_profile['active_mode'] ?? modes['active_mode'] ?? 'client')
+            .toString()
+            .toLowerCase();
+    final canProvide = modes['can_provide'] == true;
+
+    if (activeMode == 'provider') {
+      if (canProvide) return const ProviderShell();
+      return const ProviderEnablementPage();
+    }
+    return const ClientShell();
   }
 }

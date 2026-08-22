@@ -1,11 +1,12 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
-    namespace = "opentic.co.yalecaigo"
+    namespace = "opentic.co.gowith"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,7 +17,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "opentic.co.yalecaigo"
+        applicationId = "opentic.co.gowith"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -43,3 +44,13 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// BEGIN GOWITH QA V1.1.2 - AndroidX Test compatibility
+// QA-only compatibility rule for Flutter integration_test with AGP 9.x.
+configurations.configureEach {
+    resolutionStrategy {
+        force("androidx.test.espresso:espresso-core:3.6.1")
+        force("androidx.test.espresso:espresso-idling-resource:3.6.1")
+    }
+}
+// END GOWITH QA V1.1.2 - AndroidX Test compatibility

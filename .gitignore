@@ -25,3 +25,11 @@ android/key.properties
 .env
 .env.*
 !.env.example
+
+# Archivos temporales de respaldo
+Archivador.zip
+gowith_ux_registro_flutter.zip
+
+# Archivos temporales de respaldo
+Archivador.zip
+gowith_ux_registro_flutter.zip

@@ -56,7 +56,7 @@ class AuthInterceptor extends Interceptor {
       _refreshFuture = null;
 
       if (newAccess == null || newAccess.isEmpty) {
-        await TokenStorage.clear();
+        await TokenStorage.clearSession();
         handler.next(err);
         return;
       }
@@ -67,7 +67,7 @@ class AuthInterceptor extends Interceptor {
       handler.resolve(response);
     } catch (_) {
       _refreshFuture = null;
-      await TokenStorage.clear();
+      await TokenStorage.clearSession();
       handler.next(err);
     }
   }

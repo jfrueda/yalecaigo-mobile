@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/branding/app_branding.dart';
 import '../../core/theme/app_colors.dart';
 
 class BrandMark extends StatelessWidget {
@@ -19,10 +20,12 @@ class BrandMark extends StatelessWidget {
     final image = Padding(
       padding: EdgeInsets.all(padding),
       child: Image.asset(
-        'assets/branding/logo_mark.png',
+        AppBranding.markAsset,
         fit: BoxFit.contain,
         filterQuality: FilterQuality.high,
-        semanticLabel: 'YaLeCaigo',
+        semanticLabel: AppBranding.appName,
+        errorBuilder: (context, error, stackTrace) =>
+            const Icon(Icons.shield_outlined, color: AppColors.primary),
       ),
     );
 
@@ -39,7 +42,7 @@ class BrandMark extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x18073F43),
+            color: Color(0x18075E58),
             blurRadius: 14,
             offset: Offset(0, 5),
           ),
@@ -73,11 +76,11 @@ class BrandLockup extends StatelessWidget {
           SizedBox(width: compact ? 7 : 11),
         ],
         Text(
-          'YaLeCaigo',
+          AppBranding.appName,
           style: TextStyle(
             color: color,
             fontSize: compact ? 18 : 26,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w900,
             letterSpacing: -0.5,
           ),
         ),
@@ -105,7 +108,7 @@ class BrandAppBarTitle extends StatelessWidget {
         const SizedBox(width: 9),
         Flexible(
           child: Text(
-            showBrandName ? 'YaLeCaigo' : title,
+            showBrandName ? AppBranding.appName : title,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).appBarTheme.titleTextStyle,
           ),
@@ -131,52 +134,45 @@ class OpenticAttribution extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = textColor ?? AppColors.textSecondary;
     final logo = Image.asset(
-      'assets/branding/opentic_logo.png',
+      AppBranding.developerLogoAsset,
       width: imageWidth,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.high,
-      semanticLabel: 'Opentic, keep it simple',
+      semanticLabel: AppBranding.developerName,
+      errorBuilder: (context, error, stackTrace) => const Text(
+        AppBranding.developerName,
+        style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+      ),
     );
 
     if (compact) {
       return Semantics(
-        label: 'Aplicación desarrollada por Opentic S.A.S.',
+        label: 'Aplicación desarrollada por ${AppBranding.developerName}',
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
-              'by',
+              'Desarrollado por',
               style: TextStyle(
                 color: color,
-                fontSize: 11,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(width: 8),
             logo,
-            const SizedBox(width: 5),
-            Text(
-              '',
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.4,
-              ),
-            ),
           ],
         ),
       );
     }
 
     return Semantics(
-      label: 'Aplicación desarrollada por Opentic S.A.S.',
+      label: 'Aplicación desarrollada por ${AppBranding.developerName}',
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'by',
+            'Desarrollado por',
             style: TextStyle(
               color: color,
               fontSize: 11,
@@ -185,16 +181,6 @@ class OpenticAttribution extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           logo,
-          const SizedBox(height: 2),
-          Text(
-            '',
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
-          ),
         ],
       ),
     );

@@ -6,11 +6,13 @@ import '../../../core/network/endpoints.dart';
 class ServiceRequestService {
   Future<Response<dynamic>> createRequest({
     required int categoryId,
+    required int subcategoryId,
     required String locationText,
     required double locationLat,
     required double locationLng,
     required DateTime requestedStartTime,
     required int requestedDurationMinutes,
+    String? customActivityName,
     String? notes,
     String? preferredGender,
     int? preferredAgeMin,
@@ -18,12 +20,19 @@ class ServiceRequestService {
   }) {
     final payload = <String, dynamic>{
       'category': categoryId,
+      'subcategory': subcategoryId,
       'location_text': locationText,
       'location_lat': locationLat,
       'location_lng': locationLng,
       'requested_start_time': requestedStartTime.toUtc().toIso8601String(),
       'requested_duration_minutes': requestedDurationMinutes,
     };
+
+    final normalizedCustomActivityName = customActivityName?.trim();
+    if (normalizedCustomActivityName != null &&
+        normalizedCustomActivityName.isNotEmpty) {
+      payload['custom_activity_name'] = normalizedCustomActivityName;
+    }
 
     final normalizedNotes = notes?.trim();
     if (normalizedNotes != null && normalizedNotes.isNotEmpty) {

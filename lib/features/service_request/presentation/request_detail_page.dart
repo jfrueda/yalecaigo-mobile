@@ -7,10 +7,17 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/service_display.dart';
 import '../../../shared/widgets/service_rating_dialog.dart';
+import '../../../shared/widgets/service_schedule_dialogs.dart';
+import '../../safety/presentation/service_sos_panel.dart';
+import '../../tracking/data/device_location_service.dart';
+import '../../tracking/presentation/service_tracking_panel.dart';
+import '../../trust/presentation/provider_reputation_page.dart';
+import '../../trust/presentation/trust_dialogs.dart';
 import '../data/location_ping_service.dart';
 import '../data/payment_service.dart';
 import '../data/service_lifecycle_service.dart';
 import '../data/service_request_query_service.dart';
+import '../data/trust_service.dart';
 
 class RequestDetailPage extends StatefulWidget {
   const RequestDetailPage({super.key, required this.request});
@@ -26,6 +33,8 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
   final _paymentService = PaymentService();
   final _lifecycleService = ServiceLifecycleService();
   final _pingService = LocationPingService();
+  final _deviceLocationService = DeviceLocationService();
+  final _trustService = TrustService();
 
   late Map<String, dynamic> _request;
   Timer? _timer;
@@ -70,6 +79,11 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     return double.tryParse(value?.toString() ?? '') ?? fallback;
   }
 
+  int? _int(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '');
+  }
+
   bool _bool(dynamic value) => value == true;
 
   Future<void> _reload({bool silent = false}) async {
@@ -86,6 +100,10 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
         return;
       }
       setState(() => _request = fresh);
+    } on DioException catch (error) {
+      if (!silent) {
+        _showMessage(_errorMessage(error));
+      }
     } finally {
       if (mounted && !silent) {
         setState(() => _refreshing = false);
@@ -93,18 +111,20 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     }
   }
 
-  Future<void> _runAction(
+  Future<bool> _runAction(
     Future<Map<String, dynamic>> Function() action,
   ) async {
     setState(() => _loading = true);
     try {
       final updated = await action();
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() => _request = updated);
+      return true;
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
+      return false;
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -151,36 +171,45 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     }
   }
 
-  Future<void> _sendDemoLocation({required bool meetingPoint}) async {
+  Future<void> _confirmParticipation() async {
     final requestId = _id;
-    if (requestId == null) {
-      return;
+    if (requestId == null) return;
+    final succeeded = await _runAction(
+      () => _lifecycleService.confirmParticipation(requestId),
+    );
+    if (succeeded) {
+      _showMessage('Tu participación quedó confirmada.');
     }
-    final baseLat = _double(_request['location_lat'], 4.6767);
-    final baseLng = _double(_request['location_lng'], -74.0482);
-    final latitude = meetingPoint ? baseLat : baseLat + 0.012;
-    final longitude = meetingPoint ? baseLng : baseLng + 0.006;
+  }
 
-    setState(() => _loading = true);
-    try {
-      await _pingService.createPing(
-        serviceRequestId: requestId,
-        locationLat: latitude,
-        locationLng: longitude,
-        source: meetingPoint ? 'simulated_meeting_point' : 'simulated_far',
-      );
-      await _reload();
-      _showMessage(
-        meetingPoint
-            ? 'Ubicación demo enviada en el punto de encuentro.'
-            : 'Ubicación demo enviada lejos del punto.',
-      );
-    } on DioException catch (error) {
-      _showMessage(_errorMessage(error));
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+  Future<void> _reportNoShow() async {
+    final requestId = _id;
+    if (requestId == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reportar que no se presentó'),
+        content: const Text(
+          'Usa esta opción únicamente si ya estás en el punto, pasó el tiempo de espera y el acompañante no llegó.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Volver'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Reportar ausencia'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final succeeded = await _runAction(
+      () => _lifecycleService.reportNoShow(requestId),
+    );
+    if (succeeded) {
+      _showMessage('La actividad quedó cerrada por ausencia.');
     }
   }
 
@@ -189,27 +218,29 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     if (requestId == null) {
       return;
     }
-    final baseLat = _double(_request['location_lat'], 4.6767);
-    final baseLng = _double(_request['location_lng'], -74.0482);
 
     setState(() => _loading = true);
     try {
+      final position = await _deviceLocationService.currentPosition();
       await _pingService.createPing(
         serviceRequestId: requestId,
-        locationLat: baseLat,
-        locationLng: baseLng,
-        source: 'arrival_confirmation',
+        locationLat: position.latitude,
+        locationLng: position.longitude,
+        accuracy: position.accuracy,
+        source: 'arrival_confirmation_gps',
       );
       final updated = await _lifecycleService.arrive(requestId);
       if (!mounted) {
         return;
       }
       setState(() => _request = updated);
-      _showMessage(
-        'Llegada confirmada. La ubicación se actualizó automáticamente.',
-      );
+      _showMessage('Llegada confirmada con la ubicación real del dispositivo.');
+    } on DeviceLocationException catch (error) {
+      _showMessage(error.message);
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
+    } catch (error) {
+      _showMessage('No fue posible obtener la ubicación: $error');
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -219,16 +250,12 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   Future<void> _cancel() async {
     final requestId = _id;
-    if (requestId == null) {
-      return;
-    }
-    final result = await showDialog<_CancellationData>(
-      context: context,
-      builder: (_) => const _CancellationDialog(isProvider: false),
+    if (requestId == null) return;
+    final result = await showServiceCancellationDialog(
+      context,
+      isProvider: false,
     );
-    if (result == null) {
-      return;
-    }
+    if (result == null) return;
     await _runAction(
       () => _lifecycleService.cancel(
         requestId: requestId,
@@ -266,53 +293,22 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     }
   }
 
-  Future<void> _finishAndRate() async {
+  Future<void> _confirmCompletion() async {
     final requestId = _id;
-    if (requestId == null) {
-      return;
-    }
-
-    final rating = await showRequiredServiceRatingDialog(
-      context,
-      targetLabel: 'el acompañante',
+    if (requestId == null) return;
+    final succeeded = await _runAction(
+      () => _lifecycleService.confirmCompletion(requestId),
     );
-    if (rating == null || !mounted) {
-      return;
-    }
-
-    setState(() => _loading = true);
-    try {
-      final updated = await _lifecycleService.finish(requestId);
-      if (!mounted) {
-        return;
-      }
-      setState(() => _request = updated);
-
-      try {
-        await _lifecycleService.rate(
-          requestId: requestId,
-          score: rating.score,
-          comment: rating.comment,
-        );
-      } on DioException catch (error) {
-        _showMessage(
-          'La finalización quedó registrada, pero la calificación no pudo guardarse: ${_errorMessage(error)}',
-        );
-      }
-
-      await _reload();
-      final status = _request['status']?.toString().toLowerCase();
+    if (!succeeded) return;
+    await _reload();
+    if (_status == 'ended') {
       _showMessage(
-        status == 'ended'
-            ? 'Actividad finalizada y calificación registrada.'
-            : 'Finalización y calificación registradas. Falta la confirmación del prestador.',
+        'Actividad finalizada. Ambas personas confirmaron el cierre.',
       );
-    } on DioException catch (error) {
-      _showMessage(_errorMessage(error));
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+    } else {
+      _showMessage(
+        'Confirmaste el cierre. Falta la confirmación del acompañante.',
+      );
     }
   }
 
@@ -333,13 +329,82 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       await _lifecycleService.rate(
         requestId: requestId,
         score: result.score,
-        comment: result.comment,
+        privateComment: result.privateComment,
+        publicComment: result.publicComment,
       );
       await _reload();
-      _showMessage('Calificación registrada.');
+      _showMessage(
+        'Calificación registrada. El comentario público pasará por moderación.',
+      );
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
     }
+  }
+
+  Future<void> _reportBehavior() async {
+    final requestId = _id;
+    if (requestId == null) return;
+    final result = await showBehaviorReportDialog(
+      context,
+      targetLabel: 'el acompañante',
+    );
+    if (result == null) return;
+    setState(() => _loading = true);
+    try {
+      await _trustService.reportBehavior(
+        requestId: requestId,
+        category: result.category,
+        description: result.description,
+      );
+      _showMessage('Reporte enviado de forma privada a GoWith.');
+    } on DioException catch (error) {
+      _showMessage(_errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _blockProvider() async {
+    final requestId = _id;
+    final providerId = _int(_request['assigned_provider']);
+    if (requestId == null || providerId == null) return;
+    final result = await showUserBlockDialog(
+      context,
+      targetLabel:
+          _request['assigned_provider_username']?.toString() ??
+          'el acompañante',
+    );
+    if (result == null) return;
+    setState(() => _loading = true);
+    try {
+      await _trustService.blockUser(
+        userId: providerId,
+        sourceServiceId: requestId,
+        reason: result.reason,
+      );
+      _showMessage(
+        'Usuario bloqueado. No volverán a ser emparejados en nuevas actividades.',
+      );
+    } on DioException catch (error) {
+      _showMessage(_errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openProviderReputation() async {
+    final providerId = _int(_request['assigned_provider']);
+    if (providerId == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ProviderReputationPage(
+          providerId: providerId,
+          providerName:
+              _request['assigned_provider_username']?.toString() ??
+              'Acompañante',
+        ),
+      ),
+    );
   }
 
   Map<String, dynamic>? _latestLateNotice(List<Map<String, dynamic>> timeline) {
@@ -371,6 +436,47 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
       ),
     );
     _showMessage('Se notificó a la otra parte que llegarás tarde.');
+  }
+
+  Future<void> _proposeReschedule() async {
+    final requestId = _id;
+    final currentStart = DateTime.tryParse(
+      _request['requested_start_time']?.toString() ?? '',
+    )?.toLocal();
+    if (requestId == null || currentStart == null) return;
+    final proposal = await showServiceRescheduleDialog(
+      context,
+      currentStartTime: currentStart,
+    );
+    if (proposal == null) return;
+    final succeeded = await _runAction(
+      () => _lifecycleService.proposeReschedule(
+        requestId: requestId,
+        proposedStartTime: proposal.proposedStartTime,
+        reason: proposal.reason,
+      ),
+    );
+    if (succeeded) {
+      _showMessage('La propuesta de nueva hora fue enviada.');
+    }
+  }
+
+  Future<void> _respondReschedule(bool accept) async {
+    final requestId = _id;
+    if (requestId == null) return;
+    final succeeded = await _runAction(
+      () => _lifecycleService.respondReschedule(
+        requestId: requestId,
+        accept: accept,
+      ),
+    );
+    if (succeeded) {
+      _showMessage(
+        accept
+            ? 'La nueva hora quedó confirmada.'
+            : 'Se conserva la hora original de la actividad.',
+      );
+    }
   }
 
   @override
@@ -412,17 +518,47 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
           ],
           const SizedBox(height: 12),
           _serviceCard(),
+          if (_request['pending_reschedule'] is Map) ...[
+            const SizedBox(height: 12),
+            _rescheduleCard(),
+          ],
           const SizedBox(height: 12),
           _paymentCard(paymentStatus),
           if (_status == 'matched') ...[
             const SizedBox(height: 12),
             _proximityCard(),
+          ],
+          if ((_status == 'matched' || _status == 'started') &&
+              requestId != null) ...[
+            const SizedBox(height: 12),
+            ServiceTrackingPanel(serviceRequestId: requestId, status: _status),
+          ],
+          if (requestId != null &&
+              const {'matched', 'started', 'incident'}.contains(_status)) ...[
+            const SizedBox(height: 12),
+            ServiceSosPanel(
+              serviceRequestId: requestId,
+              status: _status,
+              onSosConfirmed: () => _reload(),
+            ),
+          ],
+          if (_status == 'matched' || _status == 'started') ...[
             const SizedBox(height: 12),
             _encounterCard(),
           ],
           if (_status == 'ended') ...[
             const SizedBox(height: 12),
             _ratingCard(),
+          ],
+          if (const {
+                'ended',
+                'cancelled',
+                'no_show',
+                'incident',
+              }.contains(_status) &&
+              _request['assigned_provider'] != null) ...[
+            const SizedBox(height: 12),
+            _trustCard(),
           ],
           const SizedBox(height: 12),
           _actionsCard(),
@@ -485,7 +621,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
-            _row('Actividad', _request['category_name']),
+            _row('Actividad', serviceActivityLabel(_request)),
             _row('Punto', _request['location_text']),
             _row('Inicio', formatDateTime(_request['requested_start_time'])),
             _row(
@@ -589,14 +725,6 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               'La cercanía es informativa. Al tocar “Ya llegué” se registra tu ubicación en el punto.',
               style: TextStyle(color: Colors.grey),
             ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _loading
-                  ? null
-                  : () => _sendDemoLocation(meetingPoint: false),
-              icon: const Icon(Icons.route_outlined),
-              label: const Text('Demo: simular que estoy lejos'),
-            ),
           ],
         ),
       ),
@@ -658,7 +786,11 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
 
   Widget _encounterCard() {
     final canArrive = _bool(_request['can_arrive']);
-    final canFinish = _bool(_request['can_finish']);
+    final canConfirmCompletion = _bool(_request['can_confirm_completion']);
+    final canConfirmParticipation = _bool(
+      _request['can_confirm_participation'],
+    );
+    final canReportNoShow = _bool(_request['can_report_no_show']);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -670,7 +802,29 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(operationalStageIcon(_request['operational_stage'])),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _request['operational_stage_label']?.toString() ??
+                        operationalStageLabel(_request['operational_stage']),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
             Text(encounterStatusLabel(_request['encounter_status'])),
+            if (canConfirmParticipation) ...[
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _loading ? null : _confirmParticipation,
+                icon: const Icon(Icons.verified_outlined),
+                label: const Text('Confirmar participación'),
+              ),
+            ],
             if (canArrive) ...[
               const SizedBox(height: 12),
               FilledButton.icon(
@@ -685,7 +839,7 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 label: const Text('Llegaré tarde, ¿me puedes esperar?'),
               ),
               const Text(
-                'Un solo toque confirma tu llegada y actualiza la ubicación demo.',
+                'Un solo toque confirma tu llegada usando el GPS real del dispositivo.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
@@ -707,17 +861,31 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 'Inicio confirmado: ${formatDateTime(_request['started_at'])}',
               ),
             ],
-            if (canFinish) ...[
+            if (canConfirmCompletion) ...[
               const SizedBox(height: 12),
               FilledButton.icon(
-                onPressed: _loading || _id == null ? null : _finishAndRate,
-                icon: const Icon(Icons.flag),
-                label: const Text('Finalizar y calificar'),
+                onPressed: _loading || _id == null ? null : _confirmCompletion,
+                icon: const Icon(Icons.flag_outlined),
+                label: const Text('Confirmar que la actividad terminó'),
               ),
               const Text(
-                'El servicio se cerrará cuando el prestador también confirme.',
+                'GoWith cerrará la actividad cuando ambas personas confirmen.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
+              ),
+            ],
+            if (_request['completion_waiting_for']?.toString() == 'client') ...[
+              const SizedBox(height: 8),
+              const Text(
+                'El acompañante ya confirmó el cierre. Falta tu confirmación.',
+              ),
+            ],
+            if (canReportNoShow) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _reportNoShow,
+                icon: const Icon(Icons.person_off_outlined),
+                label: const Text('El acompañante no se presentó'),
               ),
             ],
           ],
@@ -726,38 +894,185 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     );
   }
 
+  Widget _rescheduleCard() {
+    final raw = _request['pending_reschedule'];
+    if (raw is! Map) return const SizedBox.shrink();
+    final proposal = Map<String, dynamic>.from(raw);
+    final canRespond = proposal['can_respond'] == true;
+    final proposedByMe = proposal['proposed_by_me'] == true;
+    return Card(
+      color: AppColors.tint(AppColors.warning, 0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.schedule_send_outlined, color: AppColors.warning),
+                SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Cambio de horario solicitado',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Hora actual: ${formatDateTime(proposal['original_start_time'])}',
+            ),
+            Text(
+              'Nueva hora: ${formatDateTime(proposal['proposed_start_time'])}',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            if ((proposal['reason']?.toString().trim() ?? '').isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
+                child: Text('Motivo: ${proposal['reason']}'),
+              ),
+            const SizedBox(height: AppSpacing.md),
+            if (proposedByMe)
+              const Text(
+                'Esperando la respuesta del acompañante. La hora original sigue vigente.',
+              ),
+            if (canRespond) ...[
+              OutlinedButton(
+                onPressed: _loading ? null : () => _respondReschedule(false),
+                child: const Text('Rechazar y conservar hora'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              FilledButton.icon(
+                onPressed: _loading ? null : () => _respondReschedule(true),
+                icon: const Icon(Icons.check_circle_outline),
+                label: const Text('Aceptar nueva hora'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _moderationLabel(dynamic value) {
+    switch (value?.toString().toUpperCase()) {
+      case 'APPROVED':
+        return 'Aprobado y visible';
+      case 'REJECTED':
+        return 'No aprobado para publicación';
+      case 'HIDDEN':
+        return 'Oculto por moderación';
+      default:
+        return 'Pendiente de moderación';
+    }
+  }
+
   Widget _ratingCard() {
     final rating = _request['my_rating'];
+    if (rating is Map) {
+      final data = Map<String, dynamic>.from(rating);
+      final privateComment =
+          (data['private_comment'] ?? data['comment'])?.toString().trim() ?? '';
+      final publicComment = data['public_comment']?.toString().trim() ?? '';
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Tu calificación: ${data['score']}/5',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              if (publicComment.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Comentario público: $publicComment'),
+                Text(
+                  _moderationLabel(data['public_comment_status']),
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              ],
+              if (privateComment.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Nota privada para GoWith: $privateComment'),
+              ],
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _openProviderReputation,
+                icon: const Icon(Icons.insights_outlined),
+                label: const Text('Ver reputación del acompañante'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
-        child: rating is Map
-            ? Text(
-                'Tu calificación: ${rating['score']}/5\n${rating['comment'] ?? ''}',
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    '¿Cómo fue el servicio?',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed: _rate,
-                    icon: const Icon(Icons.star),
-                    label: const Text('Calificar al prestador'),
-                  ),
-                ],
-              ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '¿Cómo fue el servicio?',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: _loading ? null : _rate,
+              icon: const Icon(Icons.star),
+              label: const Text('Calificar al acompañante'),
+            ),
+            TextButton.icon(
+              onPressed: _openProviderReputation,
+              icon: const Icon(Icons.insights_outlined),
+              label: const Text('Ver reputación del acompañante'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _trustCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Confianza y convivencia',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Estas acciones quedan asociadas al servicio cerrado. Los reportes son privados y los bloqueos evitan futuros emparejamientos.',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _loading ? null : _reportBehavior,
+              icon: const Icon(Icons.report_outlined),
+              label: const Text('Reportar comportamiento'),
+            ),
+            TextButton.icon(
+              onPressed: _loading ? null : _blockProvider,
+              icon: const Icon(Icons.block_outlined),
+              label: const Text('Bloquear acompañante'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _actionsCard() {
     final canCancel = _bool(_request['can_cancel']);
+    final canPropose = _bool(_request['can_propose_reschedule']);
     final riskEnabled = const {'matched', 'started', 'ended'}.contains(_status);
-    if (!canCancel && !riskEnabled) {
+    if (!canCancel && !canPropose && !riskEnabled) {
       return const SizedBox.shrink();
     }
     return Card(
@@ -775,6 +1090,12 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
               'Usa estas opciones solo si necesitas apoyo, reprogramación o reportar una novedad de seguridad.',
               style: TextStyle(color: Colors.grey),
             ),
+            if (canPropose)
+              FilledButton.tonalIcon(
+                onPressed: _loading ? null : _proposeReschedule,
+                icon: const Icon(Icons.edit_calendar_outlined),
+                label: const Text('Proponer nueva hora'),
+              ),
             if (canCancel)
               OutlinedButton.icon(
                 onPressed: _loading ? null : _cancel,
@@ -1034,105 +1355,6 @@ class _RiskReportDialogState extends State<_RiskReportDialog> {
             _RiskReportData(_level, _reason, _detailsCtrl.text.trim()),
           ),
           child: const Text('Enviar reporte'),
-        ),
-      ],
-    );
-  }
-}
-
-class _CancellationData {
-  const _CancellationData(this.code, this.reason);
-
-  final String code;
-  final String reason;
-}
-
-class _CancellationDialog extends StatefulWidget {
-  const _CancellationDialog({required this.isProvider});
-
-  final bool isProvider;
-
-  @override
-  State<_CancellationDialog> createState() => _CancellationDialogState();
-}
-
-class _CancellationDialogState extends State<_CancellationDialog> {
-  String _code = 'no_longer_needed';
-  final _reasonCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _reasonCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final options = widget.isProvider
-        ? const {
-            'cannot_arrive': 'No puedo llegar',
-            'client_no_show': 'El solicitante no se presentó',
-            'activity_mismatch': 'La actividad no coincide',
-            'unsafe': 'No me siento seguro',
-            'other': 'Otro',
-          }
-        : const {
-            'no_longer_needed': 'Ya no necesito el servicio',
-            'provider_no_show': 'El prestador no llegó',
-            'unsafe': 'No me siento seguro',
-            'activity_changed': 'La actividad cambió',
-            'other': 'Otro',
-          };
-    if (!options.containsKey(_code)) {
-      _code = options.keys.first;
-    }
-
-    return AlertDialog(
-      title: const Text('Cancelar actividad'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: _code,
-              decoration: const InputDecoration(labelText: 'Motivo'),
-              items: options.entries
-                  .map(
-                    (entry) => DropdownMenuItem<String>(
-                      value: entry.key,
-                      child: Text(entry.value),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => _code = value);
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _reasonCtrl,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Detalle (opcional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Volver'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            _CancellationData(_code, _reasonCtrl.text),
-          ),
-          child: const Text('Confirmar cancelación'),
         ),
       ],
     );

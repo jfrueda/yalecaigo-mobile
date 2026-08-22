@@ -1,15 +1,27 @@
 class AppConfig {
-  /// URL base de la API. Se puede reemplazar al ejecutar o compilar con:
-  /// --dart-define=API_BASE_URL=http://10.0.2.2:8088/api
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:8088/api',
   );
 
-  /// Activa registros mínimos de red sin imprimir tokens ni contraseñas.
   static const bool enableNetworkLogs = bool.fromEnvironment(
     'API_LOGS',
     defaultValue: false,
+  );
+
+  static const String googleWebClientId = String.fromEnvironment(
+    'GOOGLE_WEB_CLIENT_ID',
+    defaultValue: '',
+  );
+
+  static const bool facebookAuthEnabled = bool.fromEnvironment(
+    'FACEBOOK_AUTH_ENABLED',
+    defaultValue: false,
+  );
+
+  static const String appVersion = String.fromEnvironment(
+    'APP_VERSION',
+    defaultValue: '1.0.0',
   );
 
   static String get normalizedBaseUrl {
@@ -19,4 +31,6 @@ class AppConfig {
     }
     return value;
   }
+
+  static bool get googleAuthEnabled => googleWebClientId.trim().isNotEmpty;
 }

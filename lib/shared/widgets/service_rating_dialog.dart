@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
 class ServiceRatingData {
-  const ServiceRatingData({required this.score, required this.comment});
+  const ServiceRatingData({
+    required this.score,
+    required this.privateComment,
+    required this.publicComment,
+  });
 
   final int score;
-  final String comment;
+  final String privateComment;
+  final String publicComment;
 }
 
 Future<ServiceRatingData?> showRequiredServiceRatingDialog(
@@ -36,12 +41,14 @@ class _ServiceRatingDialog extends StatefulWidget {
 }
 
 class _ServiceRatingDialogState extends State<_ServiceRatingDialog> {
-  final _commentController = TextEditingController();
+  final _privateCommentController = TextEditingController();
+  final _publicCommentController = TextEditingController();
   int _score = 5;
 
   @override
   void dispose() {
-    _commentController.dispose();
+    _privateCommentController.dispose();
+    _publicCommentController.dispose();
     super.dispose();
   }
 
@@ -61,7 +68,7 @@ class _ServiceRatingDialogState extends State<_ServiceRatingDialog> {
             children: [
               if (widget.includeFinishMessage) ...[
                 const Text(
-                  'Tu confirmación de finalización quedará registrada. Para cerrar el servicio, califica ahora la experiencia.',
+                  'Tu confirmación de finalización quedará registrada. La calificación se habilita cuando ambas personas hayan cerrado la actividad.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
@@ -89,10 +96,24 @@ class _ServiceRatingDialogState extends State<_ServiceRatingDialog> {
               Text('$_score de 5'),
               const SizedBox(height: 14),
               TextField(
-                controller: _commentController,
+                controller: _publicCommentController,
                 maxLines: 3,
+                maxLength: 2000,
                 decoration: const InputDecoration(
-                  labelText: 'Comentario (opcional)',
+                  labelText: 'Comentario público (opcional)',
+                  helperText: 'Se publicará únicamente después de moderación.',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _privateCommentController,
+                maxLines: 3,
+                maxLength: 5000,
+                decoration: const InputDecoration(
+                  labelText: 'Comentario privado para GoWith (opcional)',
+                  helperText:
+                      'No será visible para la otra persona ni en su perfil.',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -100,19 +121,20 @@ class _ServiceRatingDialogState extends State<_ServiceRatingDialog> {
           ),
         ),
         actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Ahora no'),
+          ),
           FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(
               ServiceRatingData(
                 score: _score,
-                comment: _commentController.text.trim(),
+                privateComment: _privateCommentController.text.trim(),
+                publicComment: _publicCommentController.text.trim(),
               ),
             ),
-            icon: Icon(widget.includeFinishMessage ? Icons.flag : Icons.send),
-            label: Text(
-              widget.includeFinishMessage
-                  ? 'Finalizar y enviar calificación'
-                  : 'Enviar calificación',
-            ),
+            icon: const Icon(Icons.send),
+            label: const Text('Enviar calificación'),
           ),
         ],
       ),

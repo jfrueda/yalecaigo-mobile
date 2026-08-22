@@ -8,7 +8,7 @@ class GeocodingService {
       receiveTimeout: const Duration(seconds: 10),
       headers: {
         // Nominatim recomienda identificar el user-agent
-        'User-Agent': 'yalecaigo-mvp/1.0 (contact: soporte@opentic.co)',
+        'User-Agent': 'gowith-mvp/1.0 (contact: soporte@opentic.co)',
       },
     ),
   );

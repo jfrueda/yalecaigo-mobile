@@ -5,15 +5,13 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/endpoints.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_spacing.dart';
-import '../../../core/utils/service_display.dart';
-import '../../../shared/widgets/app_components.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../service_request/data/service_request_query_service.dart';
 
 class ProviderRequestDetailPage extends StatefulWidget {
-  const ProviderRequestDetailPage({super.key, required this.request});
-
   final Map<String, dynamic> request;
+
+  const ProviderRequestDetailPage({super.key, required this.request});
 
   @override
   State<ProviderRequestDetailPage> createState() =>
@@ -21,9 +19,11 @@ class ProviderRequestDetailPage extends StatefulWidget {
 }
 
 class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
-  late Map<String, dynamic> _request;
+  final _queryService = ServiceRequestQueryService();
+
   bool _loading = false;
   String? _message;
+  late Map<String, dynamic> _request;
 
   @override
   void initState() {
@@ -31,51 +31,64 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
     _request = Map<String, dynamic>.from(widget.request);
   }
 
-  int? get _id {
-    final value = _request['id'];
-    if (value is int) {
-      return value;
-    }
+  String _string(dynamic value, [String fallback = '-']) {
+    if (value == null) return fallback;
+    final text = value.toString().trim();
+    return text.isEmpty ? fallback : text;
+  }
+
+  int? _integer(dynamic value) {
+    if (value is int) return value;
     return int.tryParse(value?.toString() ?? '');
   }
 
-  double _double(dynamic value, double fallback) {
-    if (value is num) {
-      return value.toDouble();
-    }
-    return double.tryParse(value?.toString() ?? '') ?? fallback;
+  double? _double(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
   }
 
-  Future<void> _accept() async {
-    final requestId = _id;
-    if (requestId == null) {
+  int? get _id => _integer(_request['id']);
+
+  bool get _isPending {
+    final status = _string(_request['status'], '').toLowerCase();
+    return const {'pending', 'searching'}.contains(status);
+  }
+
+  bool get _hasProvider => _request['assigned_provider'] != null;
+
+  LatLng get _position => LatLng(
+    _double(_request['location_lat']) ?? 4.6767,
+    _double(_request['location_lng']) ?? -74.0482,
+  );
+
+  Future<void> _acceptRequest() async {
+    final id = _id;
+    if (id == null) {
+      setState(
+        () => _message = 'No se encontró el identificador de la solicitud.',
+      );
       return;
     }
+
     setState(() {
       _loading = true;
       _message = null;
     });
+
     try {
-      final response = await ApiClient.dio.post(
-        Endpoints.acceptRequest(requestId),
+      final response = await ApiClient.dio.post<dynamic>(
+        Endpoints.acceptRequest(id),
       );
-      if (!mounted) {
-        return;
+      final data = response.data;
+      if (data is Map) {
+        _request = {..._request, ...Map<String, dynamic>.from(data)};
       }
-      setState(
-        () => _request = Map<String, dynamic>.from(response.data as Map),
-      );
+      if (!mounted) return;
       Navigator.of(context).pop(true);
     } on DioException catch (error) {
-      if (!mounted) {
-        return;
-      }
-      final data = error.response?.data;
+      if (!mounted) return;
       setState(() {
-        _message = data is Map
-            ? data['detail']?.toString() ??
-                  'No fue posible aceptar la actividad.'
-            : 'No fue posible aceptar la actividad.';
+        _message = _apiMessage(error, 'No fue posible aceptar la solicitud.');
       });
     } finally {
       if (mounted) {
@@ -84,219 +97,184 @@ class _ProviderRequestDetailPageState extends State<ProviderRequestDetailPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final point = LatLng(
-      _double(_request['location_lat'], 4.6767),
-      _double(_request['location_lng'], -74.0482),
-    );
-    final payment = _request['payment'] is Map
-        ? Map<String, dynamic>.from(_request['payment'] as Map)
-        : <String, dynamic>{};
+  Future<void> _dismissRequest() async {
+    final id = _id;
+    if (id == null) {
+      setState(
+        () => _message = 'No se encontró el identificador de la solicitud.',
+      );
+      return;
+    }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Revisar actividad')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.page,
-          AppSpacing.sm,
-          AppSpacing.page,
-          120,
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Ocultar esta actividad'),
+        content: const Text(
+          'La actividad dejará de aparecer en tu panel. Esta acción no afecta '
+          'a otros acompañantes.',
         ),
-        children: [
-          AppStatusPill(
-            label: 'Solicitud disponible',
-            color: AppColors.primaryMedium,
-            icon: Icons.work_outline,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Volver'),
           ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            _request['category_name']?.toString() ?? 'Acompañamiento',
-            style: Theme.of(context).textTheme.headlineSmall,
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('No me interesa'),
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            'Revisa los detalles antes de aceptar.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          AppSurfaceCard(
-            child: Column(
-              children: [
-                AppInfoRow(
-                  icon: Icons.place_outlined,
-                  label: 'Punto de encuentro',
-                  value:
-                      _request['location_text']?.toString() ?? 'Sin ubicación',
-                ),
-                const Divider(),
-                AppInfoRow(
-                  icon: Icons.event_available_outlined,
-                  label: 'Inicio',
-                  value: formatDateTime(_request['requested_start_time']),
-                ),
-                const Divider(),
-                AppInfoRow(
-                  icon: Icons.timer_outlined,
-                  label: 'Duración',
-                  value:
-                      '${_request['requested_duration_minutes'] ?? '—'} minutos',
-                ),
-                const Divider(),
-                AppInfoRow(
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: 'Ganancia estimada',
-                  value: formatCop(payment['provider_amount']),
-                  valueColor: AppColors.success,
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() {
+      _loading = true;
+      _message = null;
+    });
+
+    try {
+      await _queryService.dismissRequest(id);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on DioException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _message = _apiMessage(error, 'No fue posible ocultar la actividad.');
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  String _apiMessage(DioException error, String fallback) {
+    final data = error.response?.data;
+    if (data is Map) {
+      final detail = data['detail'];
+      if (detail != null) return detail.toString();
+    }
+    return fallback;
+  }
+
+  Widget _mapPreview() {
+    final point = _position;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: 210,
+        child: FlutterMap(
+          options: MapOptions(initialCenter: point, initialZoom: 15),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'opentic.co.gowith',
+            ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: point,
+                  width: 44,
+                  height: 44,
+                  child: const Icon(
+                    Icons.location_pin,
+                    size: 44,
+                    color: AppColors.coral,
+                  ),
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final location = _string(_request['location_text'], 'Sin ubicación');
+    final status = _string(_request['status'], 'unknown');
+    final duration = _string(_request['requested_duration_minutes']);
+    final startTime = _string(_request['requested_start_time']);
+    final price = _string(_request['calculated_price']);
+    final preferredGender = _string(
+      _request['preferred_gender_label'] ?? _request['preferred_gender'],
+      'Sin preferencia',
+    );
+    final ageMin = _integer(_request['preferred_age_min']);
+    final ageMax = _integer(_request['preferred_age_max']);
+    final ageLabel = ageMin == null && ageMax == null
+        ? 'Sin preferencia'
+        : '${ageMin ?? '—'} a ${ageMax ?? '—'} años';
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Detalle de actividad')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            location,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: AppColors.teal,
+            ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          SizedBox(
-            height: 220,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
-              child: FlutterMap(
-                options: MapOptions(initialCenter: point, initialZoom: 15),
+          const SizedBox(height: 8),
+          Text('Estado: $status'),
+          Text('Duración: $duration min'),
+          Text('Inicio: $startTime'),
+          Text('Valor: $price COP'),
+          const SizedBox(height: 16),
+          _mapPreview(),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'opentic.co.yalecaigo',
+                  const Text(
+                    'Preferencias solicitadas',
+                    style: TextStyle(fontWeight: FontWeight.w800),
                   ),
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: point,
-                        width: 48,
-                        height: 48,
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Color(0x33173F4D),
-                                blurRadius: 12,
-                                offset: Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.place_rounded,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 10),
+                  Text('Género: $preferredGender'),
+                  Text('Edad: $ageLabel'),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Esta actividad solo aparece si tu perfil cumple las '
+                    'preferencias y tienes la categoría aprobada.',
+                    style: TextStyle(color: Colors.black54),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          AppSurfaceCard(
-            backgroundColor: AppColors.tint(AppColors.primary, 0.06),
-            borderColor: AppColors.tint(AppColors.primary, 0.22),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Condiciones de la actividad',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                SizedBox(height: AppSpacing.md),
-                _SafetyLine(
-                  icon: Icons.store_mall_directory_outlined,
-                  text: 'Punto público validado',
-                ),
-                _SafetyLine(
-                  icon: Icons.lock_outline_rounded,
-                  text: 'Pago protegido',
-                ),
-                _SafetyLine(
-                  icon: Icons.verified_user_outlined,
-                  text: 'Solicitante identificado',
-                ),
-              ],
+          const SizedBox(height: 18),
+          if (_isPending && !_hasProvider) ...[
+            FilledButton.icon(
+              onPressed: _loading ? null : _acceptRequest,
+              icon: const Icon(Icons.check_circle_outline),
+              label: Text(_loading ? 'Procesando…' : 'Aceptar actividad'),
             ),
-          ),
-          if ((_request['notes']?.toString().trim() ?? '').isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.md),
-            AppSurfaceCard(
-              child: AppInfoRow(
-                icon: Icons.notes_outlined,
-                label: 'Indicación del solicitante',
-                value: _request['notes'].toString(),
-              ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _loading ? null : _dismissRequest,
+              icon: const Icon(Icons.visibility_off_outlined),
+              label: const Text('No me interesa'),
             ),
           ],
           if (_message != null) ...[
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: 14),
             Text(
               _message!,
-              textAlign: TextAlign.center,
               style: const TextStyle(
-                color: AppColors.danger,
+                color: AppColors.coral,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ],
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.page,
-            AppSpacing.md,
-            AppSpacing.page,
-            AppSpacing.md,
-          ),
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            border: Border(top: BorderSide(color: AppColors.border)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FilledButton.icon(
-                onPressed: _loading ? null : _accept,
-                icon: const Icon(Icons.check_circle_outline),
-                label: Text(_loading ? 'Aceptando…' : 'Aceptar actividad'),
-              ),
-              TextButton(
-                onPressed: _loading
-                    ? null
-                    : () => Navigator.of(context).pop(false),
-                child: const Text('No me interesa'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SafetyLine extends StatelessWidget {
-  const _SafetyLine({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
-        children: [
-          Icon(icon, size: 19, color: AppColors.success),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(child: Text(text)),
         ],
       ),
     );

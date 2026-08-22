@@ -68,7 +68,7 @@ class _PickLocationPageState extends State<PickLocationPage> {
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'co.opentic.yalecaigo',
+                userAgentPackageName: 'opentic.co.gowith',
               ),
               MarkerLayer(
                 markers: [

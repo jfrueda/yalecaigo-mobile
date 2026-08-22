@@ -29,6 +29,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   final _service = ServiceRequestService();
   final _queryService = ServiceRequestQueryService();
   final _categoryService = CategoryService();
+  final _activitySearchCtrl = TextEditingController();
+  final _customActivityCtrl = TextEditingController();
+  final _activityFocusNode = FocusNode();
   final _locationTextCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   final _mapController = MapController();
@@ -39,7 +42,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 
   List<CategoryItem> _categories = const [];
   int? _selectedCategoryId;
+  int? _selectedSubcategoryId;
   bool _loadingCategories = false;
+  bool _showActivitySuggestions = false;
 
   LatLng _location = const LatLng(4.6767, -74.0482);
   LocationPlace? _selectedPlace;
@@ -80,6 +85,8 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     super.initState();
     _selectedCategoryId = widget.initialCategoryId;
     _startTime = DateTime.now().add(const Duration(minutes: 5));
+    _activitySearchCtrl.addListener(_onActivitySearchChanged);
+    _activityFocusNode.addListener(_onActivityFocusChanged);
     _locationTextCtrl.addListener(_onLocationTextChanged);
     _loadCategories();
   }
@@ -88,6 +95,11 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   void dispose() {
     _debounce?.cancel();
     _pageController.dispose();
+    _activitySearchCtrl.removeListener(_onActivitySearchChanged);
+    _activityFocusNode.removeListener(_onActivityFocusChanged);
+    _activitySearchCtrl.dispose();
+    _customActivityCtrl.dispose();
+    _activityFocusNode.dispose();
     _locationTextCtrl.removeListener(_onLocationTextChanged);
     _locationTextCtrl.dispose();
     _notesCtrl.dispose();
@@ -103,9 +115,16 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       }
       setState(() {
         _categories = items;
-        if (_selectedCategoryId == null ||
+        if (_selectedCategoryId != null &&
             !items.any((item) => item.id == _selectedCategoryId)) {
-          _selectedCategoryId = items.isEmpty ? null : items.first.id;
+          _selectedCategoryId = null;
+        }
+        final selected = _selectedCategory;
+        if (selected == null ||
+            !selected.subcategories.any(
+              (item) => item.id == _selectedSubcategoryId,
+            )) {
+          _selectedSubcategoryId = null;
         }
       });
     } catch (_) {
@@ -127,6 +146,111 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       }
     }
     return null;
+  }
+
+  SubcategoryItem? get _selectedSubcategory {
+    final category = _selectedCategory;
+    if (category == null) return null;
+    for (final subcategory in category.subcategories) {
+      if (subcategory.id == _selectedSubcategoryId) {
+        return subcategory;
+      }
+    }
+    return null;
+  }
+
+  List<ActivityCatalogItem> get _allActivities => _categories
+      .expand(
+        (category) => category.subcategories.map(
+          (subcategory) =>
+              ActivityCatalogItem(category: category, subcategory: subcategory),
+        ),
+      )
+      .toList(growable: false);
+
+  List<ActivityCatalogItem> get _filteredActivities {
+    final query = _activitySearchCtrl.text.trim().toLowerCase();
+    final all = _allActivities;
+    if (query.isEmpty) {
+      final regular = all.where((item) => !item.subcategory.allowsCustomName);
+      final custom = all.where((item) => item.subcategory.allowsCustomName);
+      return <ActivityCatalogItem>[...regular.take(7), ...custom.take(1)];
+    }
+
+    final matches = all
+        .where((item) => item.searchableText.contains(query))
+        .toList(growable: false);
+    if (matches.isNotEmpty) {
+      return matches.take(10).toList(growable: false);
+    }
+    return all
+        .where((item) => item.subcategory.allowsCustomName)
+        .take(1)
+        .toList(growable: false);
+  }
+
+  String get _effectiveActivityName {
+    final subcategory = _selectedSubcategory;
+    if (subcategory == null) return '';
+    if (subcategory.allowsCustomName) {
+      final custom = _customActivityCtrl.text.trim();
+      return custom.isEmpty ? subcategory.name : custom;
+    }
+    return subcategory.name;
+  }
+
+  void _onActivitySearchChanged() {
+    if (!mounted) return;
+    final selected = _selectedSubcategory;
+    if (selected != null && _activitySearchCtrl.text.trim() != selected.name) {
+      _selectedCategoryId = null;
+      _selectedSubcategoryId = null;
+      _customActivityCtrl.clear();
+    }
+    setState(() {
+      _showActivitySuggestions = _activityFocusNode.hasFocus;
+      _result = null;
+    });
+  }
+
+  void _onActivityFocusChanged() {
+    if (!mounted) return;
+    setState(() {
+      _showActivitySuggestions = _activityFocusNode.hasFocus;
+    });
+  }
+
+  void _selectActivity(ActivityCatalogItem item) {
+    _activitySearchCtrl.removeListener(_onActivitySearchChanged);
+    setState(() {
+      _selectedCategoryId = item.category.id;
+      _selectedSubcategoryId = item.subcategory.id;
+      _activitySearchCtrl.text = item.subcategory.name;
+      _activitySearchCtrl.selection = TextSelection.collapsed(
+        offset: _activitySearchCtrl.text.length,
+      );
+      if (!item.subcategory.allowsCustomName) {
+        _customActivityCtrl.clear();
+      }
+      _showActivitySuggestions = false;
+      _result = null;
+    });
+    _activitySearchCtrl.addListener(_onActivitySearchChanged);
+    _activityFocusNode.unfocus();
+  }
+
+  void _clearActivitySelection() {
+    _activitySearchCtrl.removeListener(_onActivitySearchChanged);
+    setState(() {
+      _selectedCategoryId = null;
+      _selectedSubcategoryId = null;
+      _activitySearchCtrl.clear();
+      _customActivityCtrl.clear();
+      _showActivitySuggestions = true;
+      _result = null;
+    });
+    _activitySearchCtrl.addListener(_onActivitySearchChanged);
+    _activityFocusNode.requestFocus();
   }
 
   double get _estimatedPrice {
@@ -287,9 +411,18 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     setState(() => _result = null);
     switch (_step) {
       case 0:
-        if (_selectedCategoryId == null) {
+        if (_selectedCategoryId == null || _selectedSubcategoryId == null) {
           setState(
-            () => _result = 'Selecciona la actividad que vas a realizar.',
+            () =>
+                _result = 'Busca y selecciona la actividad que vas a realizar.',
+          );
+          return false;
+        }
+        if (_selectedSubcategory?.allowsCustomName == true &&
+            _customActivityCtrl.text.trim().length < 4) {
+          setState(
+            () => _result =
+                'Describe la actividad cotidiana con al menos 4 caracteres.',
           );
           return false;
         }
@@ -336,7 +469,10 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
 
   Future<void> _submit() async {
     final categoryId = _selectedCategoryId;
-    if (categoryId == null || _locationTextCtrl.text.trim().isEmpty) {
+    final subcategoryId = _selectedSubcategoryId;
+    if (categoryId == null ||
+        subcategoryId == null ||
+        _locationTextCtrl.text.trim().isEmpty) {
       return;
     }
 
@@ -351,11 +487,15 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
     try {
       final response = await _service.createRequest(
         categoryId: categoryId,
+        subcategoryId: subcategoryId,
         locationText: _locationTextCtrl.text.trim(),
         locationLat: double.parse(_location.latitude.toStringAsFixed(6)),
         locationLng: double.parse(_location.longitude.toStringAsFixed(6)),
         requestedStartTime: effectiveStart,
         requestedDurationMinutes: _durationMinutes,
+        customActivityName: _selectedSubcategory?.allowsCustomName == true
+            ? _customActivityCtrl.text.trim()
+            : null,
         notes: _notesCtrl.text.trim(),
         preferredGender: _preferredGender,
         preferredAgeMin: _selectedAgeRange?.min,
@@ -379,52 +519,30 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       }
       final data = error.response?.data;
       setState(() {
-        _result = data is Map
-            ? data['detail']?.toString() ?? 'No fue posible crear la solicitud.'
-            : 'No fue posible crear la solicitud.';
+        if (data is Map) {
+          final detail = data['detail'];
+          final schedule = data['requested_start_time'];
+          final subcategory = data['subcategory'];
+          final customActivity = data['custom_activity_name'];
+          _result =
+              detail?.toString() ??
+              (schedule is List ? schedule.join(' ') : schedule?.toString()) ??
+              (customActivity is List
+                  ? customActivity.join(' ')
+                  : customActivity?.toString()) ??
+              (subcategory is List
+                  ? subcategory.join(' ')
+                  : subcategory?.toString()) ??
+              'No fue posible crear la solicitud.';
+        } else {
+          _result = 'No fue posible crear la solicitud.';
+        }
       });
     } finally {
       if (mounted) {
         setState(() => _loading = false);
       }
     }
-  }
-
-  IconData _categoryIcon(CategoryItem category) {
-    final value = category.name.toLowerCase();
-    if (value.contains('méd') ||
-        value.contains('salud') ||
-        value.contains('cita')) {
-      return Icons.event_available_outlined;
-    }
-    if (value.contains('compra') || value.contains('merc')) {
-      return Icons.shopping_bag_outlined;
-    }
-    if (value.contains('trámite') || value.contains('dilig')) {
-      return Icons.assignment_outlined;
-    }
-    if (value.contains('estudio') || value.contains('clase')) {
-      return Icons.menu_book_outlined;
-    }
-    if (value.contains('deporte') ||
-        value.contains('caminar') ||
-        value.contains('paseo')) {
-      return Icons.directions_walk_outlined;
-    }
-    if (value.contains('comida') ||
-        value.contains('café') ||
-        value.contains('rest')) {
-      return Icons.restaurant_outlined;
-    }
-    return Icons.people_alt_outlined;
-  }
-
-  String _categoryHint(CategoryItem category) {
-    final description = category.description.trim();
-    if (description.isNotEmpty) {
-      return description;
-    }
-    return 'Acompañamiento presencial para la actividad seleccionada.';
   }
 
   @override
@@ -512,6 +630,9 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
   }
 
   Widget _activityStep() {
+    final selectedCategory = _selectedCategory;
+    final selectedSubcategory = _selectedSubcategory;
+    final suggestions = _filteredActivities;
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.page,
@@ -521,100 +642,164 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
       ),
       children: [
         const AppSectionHeader(
-          title: '¿Qué vas a hacer?',
+          title: '¿Qué actividad quieres realizar?',
           subtitle:
-              'Selecciona la actividad que mejor representa lo que necesitas.',
+              'Escribe una palabra y selecciona una opción. GoWith organizará la categoría automáticamente.',
         ),
         const SizedBox(height: AppSpacing.lg),
-        if (_loadingCategories)
-          const Center(child: CircularProgressIndicator())
-        else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final width = (constraints.maxWidth - AppSpacing.md) / 2;
-              return Wrap(
-                spacing: AppSpacing.md,
-                runSpacing: AppSpacing.md,
-                children: _categories.map((category) {
-                  final selected = category.id == _selectedCategoryId;
-                  return SizedBox(
-                    width: width,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(
-                        AppSpacing.cardRadius,
+        TextField(
+          controller: _activitySearchCtrl,
+          focusNode: _activityFocusNode,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            labelText: 'Buscar actividad',
+            hintText: 'Ej. cine, café, caminar, museo o compras',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: _activitySearchCtrl.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Limpiar actividad',
+                    onPressed: _clearActivitySelection,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+          ),
+          onTap: () => setState(() => _showActivitySuggestions = true),
+        ),
+        if (_loadingCategories) ...[
+          const SizedBox(height: AppSpacing.md),
+          const LinearProgressIndicator(),
+        ] else if (_showActivitySuggestions) ...[
+          const SizedBox(height: AppSpacing.sm),
+          AppSurfaceCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (var index = 0; index < suggestions.length; index++) ...[
+                  ListTile(
+                    onTap: () => _selectActivity(suggestions[index]),
+                    leading: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceSoft,
+                        borderRadius: BorderRadius.circular(13),
                       ),
-                      onTap: () =>
-                          setState(() => _selectedCategoryId = category.id),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        constraints: const BoxConstraints(minHeight: 168),
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? AppColors.tint(AppColors.secondary, 0.15)
-                              : AppColors.surface,
-                          borderRadius: BorderRadius.circular(
-                            AppSpacing.cardRadius,
-                          ),
-                          border: Border.all(
-                            color: selected
-                                ? AppColors.primaryMedium
-                                : AppColors.border,
-                            width: selected ? 1.7 : 1,
-                          ),
+                      child: Icon(
+                        activityIconFromCode(
+                          suggestions[index].subcategory.iconCode,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 46,
-                                  height: 46,
-                                  decoration: BoxDecoration(
-                                    color: selected
-                                        ? AppColors.primary
-                                        : AppColors.surfaceSoft,
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: Icon(
-                                    _categoryIcon(category),
-                                    color: selected
-                                        ? Colors.white
-                                        : AppColors.primary,
-                                  ),
-                                ),
-                                const Spacer(),
-                                if (selected)
-                                  const Icon(
-                                    Icons.check_circle_rounded,
-                                    color: AppColors.primary,
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            Text(
-                              category.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            Text(
-                              _categoryHint(category),
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
+                        color: AppColors.primary,
                       ),
                     ),
-                  );
-                }).toList(),
-              );
-            },
+                    title: Text(
+                      suggestions[index].subcategory.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text(
+                      suggestions[index].category.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                  ),
+                  if (index < suggestions.length - 1) const Divider(height: 1),
+                ],
+                if (suggestions.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(AppSpacing.lg),
+                    child: Text(
+                      'No encontramos coincidencias. Intenta con otra palabra.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+              ],
+            ),
           ),
+        ],
+        if (selectedCategory != null && selectedSubcategory != null) ...[
+          const SizedBox(height: AppSpacing.lg),
+          AppSurfaceCard(
+            backgroundColor: AppColors.tint(AppColors.primary, 0.07),
+            borderColor: AppColors.primaryMedium,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Icon(
+                    activityIconFromCode(selectedSubcategory.iconCode),
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _effectiveActivityName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 17,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        selectedCategory.name,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Cambiar actividad',
+                  onPressed: _clearActivitySelection,
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+              ],
+            ),
+          ),
+          if (selectedSubcategory.allowsCustomName) ...[
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _customActivityCtrl,
+              maxLength: 120,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Describe la actividad cotidiana',
+                hintText: 'Ej. Acompañarme a una feria de emprendimiento',
+                prefixIcon: Icon(Icons.auto_awesome_outlined),
+                helperText:
+                    'Debe realizarse en un espacio público y no puede corresponder a actividades especiales.',
+                helperMaxLines: 3,
+              ),
+              onChanged: (_) => setState(() => _result = null),
+            ),
+          ],
+        ],
+        const SizedBox(height: AppSpacing.md),
+        const AppSurfaceCard(
+          backgroundColor: AppColors.surfaceSoft,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.shield_outlined, color: AppColors.primary),
+              SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  'GoWith no admite citas, encuentros sexuales, actividades médicas, financieras, conducción ni servicios dentro de viviendas, habitaciones u hospedajes privados.',
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -715,7 +900,7 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'opentic.co.yalecaigo',
+                  userAgentPackageName: 'opentic.co.gowith',
                 ),
                 MarkerLayer(
                   markers: [
@@ -1168,11 +1353,19 @@ class _CreateRequestPageState extends State<CreateRequestPage> {
           child: Column(
             children: [
               AppInfoRow(
-                icon: category == null
-                    ? Icons.people_alt_outlined
-                    : _categoryIcon(category),
+                icon: _selectedSubcategory == null
+                    ? Icons.category_outlined
+                    : activityIconFromCode(_selectedSubcategory!.iconCode),
+                label: 'Categoría',
+                value: category?.name ?? 'Sin categoría',
+              ),
+              const Divider(),
+              AppInfoRow(
+                icon: Icons.checklist_rounded,
                 label: 'Actividad',
-                value: category?.name ?? 'Sin actividad',
+                value: _effectiveActivityName.isEmpty
+                    ? 'Sin actividad'
+                    : _effectiveActivityName,
               ),
               const Divider(),
               AppInfoRow(

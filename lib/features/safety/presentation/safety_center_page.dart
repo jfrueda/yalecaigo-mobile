@@ -55,6 +55,24 @@ class SafetyCenterPage extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         const AppSurfaceCard(
+          backgroundColor: Color(0xFFFFF8F5),
+          borderColor: Color(0xFFF2D4CC),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.no_adult_content_outlined, color: AppColors.coral),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'GoWith no es una aplicación de citas ni de encuentros sexuales. Los domicilios solo pueden utilizarse como punto de recogida o destino final cuando la actividad lo permita.',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        const AppSurfaceCard(
           child: Column(
             children: [
               AppInfoRow(
@@ -66,8 +84,9 @@ class SafetyCenterPage extends StatelessWidget {
               Divider(),
               AppInfoRow(
                 icon: Icons.block_outlined,
-                label: 'Evita en la primera reunión',
-                value: 'Viviendas, habitaciones, hoteles y sitios aislados.',
+                label: 'Lugares no permitidos',
+                value:
+                    'No se permiten actividades en viviendas, habitaciones, hoteles, moteles ni alojamientos privados.',
               ),
               Divider(),
               AppInfoRow(
@@ -143,7 +162,7 @@ class SafetyCenterPage extends StatelessWidget {
               ),
               SizedBox(height: AppSpacing.sm),
               Text(
-                'YaLeCaigo registra y remite reportes dentro de la plataforma. Si existe peligro inmediato, comunícate con la línea local de emergencias.',
+                'Al activar SOS desde una actividad, GoWith registra el caso y ejecuta los canales de escalamiento configurados. Solo los contactos activos y verificados pueden recibir envíos externos. Si el teléfono pierde conexión, la app conserva el SOS como pendiente hasta obtener confirmación del servidor. GoWith no sustituye a la policía, ambulancias ni demás autoridades.',
               ),
             ],
           ),

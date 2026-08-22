@@ -184,7 +184,7 @@ class LocationSearchService {
               headers: const {
                 'Accept': 'application/json',
                 // Nominatim pide User-Agent identificable; pon uno simple
-                'User-Agent': 'yalecaigo-mvp/1.0 (contact: dev@local)',
+                'User-Agent': 'gowith-mvp/1.0 (contact: dev@local)',
               },
             ),
           ),
