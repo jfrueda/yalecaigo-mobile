@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -152,22 +153,58 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _simulatePayment() async {
+  Future<void> _startEpaycoPayment() async {
     final requestId = _id;
     if (requestId == null) {
       return;
     }
     setState(() => _loading = true);
     try {
-      await _paymentService.simulateApproval(requestId);
-      await _reload();
-      _showMessage('Pago demo aprobado. Ya estamos buscando acompañante.');
+      final session = await _paymentService.createEpaycoCheckoutSession(
+        requestId,
+      );
+      final rawUrl = session['checkout_url']?.toString().trim() ?? '';
+      final checkoutUri = Uri.tryParse(rawUrl);
+      if (checkoutUri == null || checkoutUri.scheme.toLowerCase() != 'https') {
+        _showMessage('No fue posible obtener un Checkout seguro de ePayco.');
+        return;
+      }
+
+      final opened = await launchUrl(
+        checkoutUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) {
+        _showMessage('No fue posible abrir ePayco. Intenta nuevamente.');
+        return;
+      }
+
+      _showMessage(
+        'Completa el pago en ePayco. Al regresar, verifica el estado del pago.',
+      );
     } on DioException catch (error) {
       _showMessage(_errorMessage(error));
+    } catch (_) {
+      _showMessage('No fue posible iniciar el pago con ePayco.');
     } finally {
       if (mounted) {
         setState(() => _loading = false);
       }
+    }
+  }
+
+  Future<void> _refreshEpaycoPayment() async {
+    await _reload();
+    if (!mounted) {
+      return;
+    }
+    final currentStatus = _payment['status']?.toString().toLowerCase();
+    if (currentStatus == 'held') {
+      _showMessage('Pago confirmado. Ya estamos buscando acompañante.');
+    } else if (currentStatus == 'pending') {
+      _showMessage('ePayco todavía no ha confirmado el pago.');
+    } else {
+      _showMessage('Estado del pago: ${paymentStatusLabel(currentStatus)}');
     }
   }
 
@@ -655,18 +692,25 @@ class _RequestDetailPageState extends State<RequestDetailPage> {
                 _payment['amount_total'] ?? _request['calculated_price'],
               ),
             ),
-            _row('Comisión demo', formatCop(_payment['platform_fee'])),
+            _row('Comisión GoWith', formatCop(_payment['platform_fee'])),
             if (isPending) ...[
               const SizedBox(height: 8),
               FilledButton.icon(
-                onPressed: _loading ? null : _simulatePayment,
+                onPressed: _loading ? null : _startEpaycoPayment,
                 icon: const Icon(Icons.credit_card),
-                label: const Text('Simular pago aprobado'),
+                label: const Text('Pagar con ePayco'),
               ),
+              const SizedBox(height: 8),
               const Text(
-                'Este botón reemplaza temporalmente la pasarela real para el video del MVP.',
+                'El cobro se procesa de forma segura en ePayco. GoWith solo confirma el pago cuando recibe la validación de la pasarela.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _refreshEpaycoPayment,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Verificar estado del pago'),
               ),
             ],
             if (!isPending && paymentStatus == 'release_pending') ...[

@@ -143,6 +143,9 @@ abstract final class Endpoints {
 
   static String payment(int requestId) => '/payments/requests/$requestId/';
 
+  static String epaycoCheckoutSession(int requestId) =>
+      '/payments/epayco/requests/$requestId/session/';
+
   static String simulatePayment(int requestId) =>
       '/payments/requests/$requestId/simulate-approve/';
 

@@ -7,6 +7,15 @@ class PaymentService {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  Future<Map<String, dynamic>> createEpaycoCheckoutSession(
+    int requestId,
+  ) async {
+    final response = await ApiClient.dio.post(
+      Endpoints.epaycoCheckoutSession(requestId),
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<Map<String, dynamic>> simulateApproval(int requestId) async {
     final response = await ApiClient.dio.post(
       Endpoints.simulatePayment(requestId),
