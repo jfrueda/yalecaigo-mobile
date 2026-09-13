@@ -6,6 +6,7 @@ import '../../../core/utils/service_display.dart';
 import '../../../shared/widgets/app_components.dart';
 import '../../service_request/data/service_request_query_service.dart';
 import 'provider_active_service_page.dart';
+import 'provider_payout_destinations_page.dart';
 
 class ProviderHistoryPage extends StatefulWidget {
   const ProviderHistoryPage({
@@ -147,6 +148,8 @@ class _ProviderHistoryPageState extends State<ProviderHistoryPage> {
                 title: 'Estado de cuenta',
                 subtitle: 'Consulta tus valores pendientes y transferidos.',
               ),
+              const SizedBox(height: AppSpacing.lg),
+              const ProviderPayoutDestinationSummaryCard(),
               const SizedBox(height: AppSpacing.lg),
               Row(
                 children: [

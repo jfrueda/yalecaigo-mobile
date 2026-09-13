@@ -140,6 +140,13 @@ abstract final class Endpoints {
   // Payments and provider wallet.
   static const String wallet = '/payments/wallet/';
   static const String walletTransactions = '/payments/wallet/transactions/';
+  static const String payoutDestinations = '/payments/payout-destinations/';
+
+  static String payoutDestination(int destinationId) =>
+      '/payments/payout-destinations/$destinationId/';
+
+  static String payoutDestinationPrimary(int destinationId) =>
+      '/payments/payout-destinations/$destinationId/primary/';
 
   static String payment(int requestId) => '/payments/requests/$requestId/';
 
